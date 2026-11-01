@@ -1237,26 +1237,28 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}button,a,select,
 <body>
 <div class="min-h-screen">
 <header class="bg-white border-b border-[#e9e5dc] sticky top-0 z-30">
-  <div class="max-w-[1500px] mx-auto px-4 md:px-7">
-    <div class="py-3 flex items-center justify-between gap-2 md:gap-4">
-      <div class="flex items-center gap-3 min-w-0">
-        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-[#B8933F] to-[#7A5C20] flex items-center justify-center text-white shadow-md flex-shrink-0">
-          <i class="fa-solid fa-shield-halved text-xl"></i>
+  <div class="max-w-[1500px] mx-auto px-3 sm:px-4 md:px-7">
+    <div class="py-2.5 md:py-3 flex items-center justify-between gap-2">
+      <!-- Brand & Logo -->
+      <div class="flex items-center gap-2 sm:gap-2.5 md:gap-3 min-w-0">
+        <div class="w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 rounded-xl bg-gradient-to-br from-[#B8933F] to-[#7A5C20] flex items-center justify-center text-white shadow-sm flex-shrink-0">
+          <i class="fa-solid fa-shield-halved text-base sm:text-lg md:text-xl"></i>
         </div>
         <div class="min-w-0">
-          <h1 class="font-extrabold text-lg tracking-tight leading-none text-[#1C1C1E]">IRON-PASS</h1>
-          <span class="text-[10px] font-semibold uppercase tracking-wider text-[#99762E]">Elite Gym & ITF Taekwon-Do</span>
+          <h1 class="font-extrabold text-sm sm:text-base md:text-lg tracking-tight leading-none text-[#1C1C1E] truncate">IRON-PASS</h1>
+          <span class="text-[9px] sm:text-[10px] font-semibold uppercase tracking-wider text-[#99762E] block truncate mt-0.5">Elite Gym & ITF</span>
         </div>
       </div>
-      <div class="flex items-center gap-2 flex-shrink-0">
-        <!-- Supabase Database Connection Status Indicator -->
-        <button id="supabaseHeaderBadge" onclick="navigate('settings')" class="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold border border-[#e9e5dc] bg-[#faf8f0] text-stone-700 hover:bg-[#f2ead7] active:scale-95 transition" title="Supabase Database Status (Click to manage)">
-          <span id="supabaseHeaderDot" class="w-2.5 h-2.5 rounded-full bg-stone-400"></span>
-          <span id="supabaseHeaderText">Local Database</span>
+      <!-- Header Actions (Mobile Optimized) -->
+      <div class="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+        <button id="supabaseHeaderBadge" onclick="navigate('settings')" class="flex items-center gap-1.5 px-2 py-1.5 sm:px-2.5 sm:py-1.5 md:px-3 md:py-2 rounded-xl text-xs font-semibold border border-[#e9e5dc] bg-[#faf8f0] text-stone-700 hover:bg-[#f2ead7] active:scale-95 transition shadow-sm" title="Cloud Database Status">
+          <span id="supabaseHeaderDot" class="w-2 h-2 rounded-full bg-stone-400"></span>
+          <span id="supabaseHeaderText" class="text-[11px] sm:text-xs">Cloud Active</span>
         </button>
-        <button onclick="navigate('scanner')" class="bg-[#1C1C1E] text-white px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 shadow-sm active:scale-95 transition-transform">
-          <i class="fa-solid fa-qrcode text-[#D4AF37]"></i>
-          <span>Scan Pass</span>
+        <button onclick="navigate('scanner')" class="bg-[#1C1C1E] text-white px-2.5 py-1.5 sm:px-3 sm:py-1.5 md:px-3.5 md:py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm active:scale-95 transition-transform">
+          <i class="fa-solid fa-qrcode text-[#D4AF37] text-xs sm:text-sm"></i>
+          <span class="hidden sm:inline">Scan Pass</span>
+          <span class="sm:hidden">Scan</span>
         </button>
       </div>
     </div>
@@ -1331,92 +1333,132 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}button,a,select,
   <div id="rollcallList" class="grid grid-cols-1 lg:grid-cols-2 gap-3"></div>
 </section>
 <section id="view-settings" class="view">
-  <div class="mb-6"><div class="eyebrow mb-2">Control center</div><h1 class="text-3xl font-extrabold tracking-tight">Settings & Cloud Database</h1><p class="text-sm text-stone-500 mt-2">Manage your club settings, Supabase cloud database sync, and local offline backups.</p></div>
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
-    <!-- Supabase Cloud Database Card -->
-    <div class="card p-5 md:p-6 lg:col-span-2 border-2 border-[#d4af5a]/40 bg-gradient-to-br from-white via-white to-[#fbf8f0]">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5 pb-4 border-b border-[#eeeae1]">
-        <div class="flex gap-3 items-center">
-          <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-[#3ECF8E] to-[#1C7C54] text-white grid place-items-center shadow-sm flex-shrink-0">
-            <i class="fa-solid fa-database text-xl"></i>
+  <div class="mb-5 md:mb-6">
+    <div class="eyebrow mb-1 md:mb-2">Mobile & App Control Center</div>
+    <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight">Settings & Preferences</h1>
+    <p class="text-xs md:text-sm text-stone-500 mt-1">Configure your gym name, opening hours, fee currency, and sync cloud data.</p>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5">
+    <!-- Cloud Database Status & Backup Card (Clean & Safe for Owner) -->
+    <div class="card p-5 md:p-6 border border-[#e8dfc9] bg-gradient-to-br from-white via-white to-[#fbf8f0]">
+      <div class="flex items-center justify-between gap-3 mb-4">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-[#059669] to-[#047857] text-white grid place-items-center shadow-sm flex-shrink-0">
+            <i class="fa-solid fa-cloud-check text-lg"></i>
           </div>
           <div>
-            <div class="flex flex-wrap items-center gap-2">
-              <h2 class="font-extrabold text-lg">Supabase Cloud Database</h2>
-              <span id="supabaseCardBadge" class="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-stone-100 text-stone-600 border border-stone-200">Local Mode</span>
+            <div class="flex items-center gap-2">
+              <h2 class="font-extrabold text-base">Cloud Synchronization</h2>
+              <span id="supabaseCardBadge" class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">● Cloud Active</span>
             </div>
-            <p class="text-xs text-stone-500 mt-0.5">Sync gym members, attendance, check-in history, and settings across all devices in real-time.</p>
+            <p class="text-xs text-stone-500 mt-0.5">Real-time sync between front desk, tablet, and mobile app.</p>
           </div>
-        </div>
-        <div class="flex flex-wrap items-center gap-2">
-          <button type="button" class="btn btn-light btn-sm" onclick="showSqlModal()">
-            <i class="fa-solid fa-code text-[#9b7834]"></i> View SQL Schema
-          </button>
-          <button type="button" id="supabaseSyncBtn" class="btn btn-light btn-sm" onclick="syncFromSupabase(false)">
-            <i class="fa-solid fa-arrows-rotate text-[#059669]"></i> Pull from Cloud
-          </button>
-          <button type="button" id="supabasePushBtn" class="btn btn-light btn-sm" onclick="pushAllToSupabase()">
-            <i class="fa-solid fa-cloud-arrow-up text-[#b8933f]"></i> Push Local to Cloud
-          </button>
         </div>
       </div>
 
-      <!-- Supabase Connection Form -->
-      <form id="supabaseForm" class="space-y-4" onsubmit="saveSupabaseConfig(event)">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label class="field-label" for="supabaseUrl">Supabase Project URL</label>
-            <input id="supabaseUrl" type="url" class="field" value="https://przdrpcppvyjbfmyhczm.supabase.co" placeholder="https://xxxxxxxxxxxxxxxx.supabase.co" autocomplete="off" spellcheck="false">
-            <p class="text-[11px] text-stone-400 mt-1">Found in Supabase Dashboard &rarr; Project Settings &rarr; API</p>
-          </div>
-          <div>
-            <label class="field-label" for="supabaseKey">Supabase Anon Public API Key</label>
-            <div class="relative">
-              <input id="supabaseKey" type="password" class="field pr-10" value="sb_publishable_hxtzft_sUWYQHxg3p246mg_Y0vBOAj0" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6..." autocomplete="off" spellcheck="false">
-              <button type="button" onclick="toggleKeyVisibility()" class="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 text-xs" title="Toggle visibility">
-                <i id="keyEyeIcon" class="fa-solid fa-eye"></i>
-              </button>
-            </div>
-            <p class="text-[11px] text-stone-400 mt-1">Found under 'Project API keys' &rarr; <code class="bg-stone-100 px-1 py-0.5 rounded text-stone-700">anon public</code></p>
-          </div>
+      <div class="bg-[#faf8f2] border border-[#e8dfc9] rounded-xl p-3.5 mb-4 text-xs text-stone-600 space-y-1.5">
+        <div class="flex items-center gap-2 font-semibold text-stone-800">
+          <i class="fa-solid fa-shield-halved text-[#b8933f]"></i>
+          <span>Secure Cloud Protection</span>
         </div>
+        <p class="text-stone-500">All member records, pass scans, and payment history are automatically backed up to your dedicated cloud database. Offline local storage continues to work automatically.</p>
+      </div>
 
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
-          <label class="flex items-center gap-2.5 text-xs text-stone-700 font-semibold cursor-pointer select-none">
-            <input type="checkbox" id="supabaseRealtimeToggle" class="w-4 h-4 rounded text-[#059669] border-stone-300 focus:ring-0" checked>
-            <span>Enable Realtime Multi-Device Sync (Instant updates when members scan or register)</span>
-          </label>
-          <div class="flex items-center gap-2">
-            <button type="button" class="btn btn-light" onclick="testSupabaseConnection()">
-              <i class="fa-solid fa-bolt"></i> Test Connection
-            </button>
-            <button type="button" id="supabaseDisconnectBtn" class="btn btn-light text-red-600 hidden" onclick="disconnectSupabase()">
-              <i class="fa-solid fa-plug-circle-xmark"></i> Disconnect
-            </button>
-            <button type="submit" class="btn btn-gold">
-              <i class="fa-solid fa-floppy-disk"></i> Save & Connect
-            </button>
-          </div>
-        </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <button type="button" id="supabaseSyncBtn" class="btn btn-gold btn-sm" onclick="syncFromSupabase(false)">
+          <i class="fa-solid fa-arrows-rotate mr-1"></i> Sync from Cloud Now
+        </button>
+        <button type="button" id="supabasePushBtn" class="btn btn-light btn-sm" onclick="pushAllToSupabase()">
+          <i class="fa-solid fa-cloud-arrow-up mr-1 text-[#b8933f]"></i> Push Local to Cloud
+        </button>
+      </div>
 
-        <!-- Connection Notice Banner -->
-        <div id="supabaseNotice" class="rounded-xl p-3 text-xs flex items-center justify-between gap-3 bg-[#f6f2e8] text-stone-700 border border-[#e8dfc9]">
-          <div class="flex items-center gap-2">
-            <i id="supabaseNoticeIcon" class="fa-solid fa-circle-info text-[#b8933f] text-sm"></i>
-            <span id="supabaseNoticeText">Enter your Supabase credentials above to connect your gym database to the cloud. Offline local storage continues to work automatically as a backup.</span>
+      <!-- Hidden inputs to maintain 100% JS compatibility without cluttering owner view -->
+      <div class="hidden">
+        <input id="supabaseUrl" type="hidden" value="https://przdrpcppvyjbfmyhczm.supabase.co">
+        <input id="supabaseKey" type="hidden" value="sb_publishable_hxtzft_sUWYQHxg3p246mg_Y0vBOAj0">
+        <input type="checkbox" id="supabaseRealtimeToggle" checked>
+        <button type="button" id="supabaseDisconnectBtn" class="hidden"></button>
+        <div id="supabaseNotice"><span id="supabaseNoticeText"></span><i id="supabaseNoticeIcon"></i></div>
+      </div>
+    </div>
+
+    <!-- Club Preferences Form -->
+    <div class="card p-5 md:p-6">
+      <div class="flex gap-3 items-center mb-5">
+        <div class="w-10 h-10 rounded-xl bg-[#f4eddd] text-[#92702c] grid place-items-center flex-shrink-0">
+          <i class="fa-solid fa-sliders"></i>
+        </div>
+        <div>
+          <h2 class="font-bold text-base">Club Preferences</h2>
+          <p class="text-xs text-stone-500">Configure your gym name, hours, and currency.</p>
+        </div>
+      </div>
+      <form id="settingsForm" class="space-y-4" onsubmit="saveSettings(event)">
+        <div>
+          <label class="field-label" for="clubName">Club / Gym Name</label>
+          <input id="clubName" class="field" required placeholder="e.g. IRON-PASS Elite Club">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="field-label" for="openingHour">Opening Hour (24h)</label>
+            <select id="openingHour" class="field"></select>
+          </div>
+          <div>
+            <label class="field-label" for="currency">Currency Label</label>
+            <input id="currency" class="field" maxlength="8" placeholder="ETB">
           </div>
         </div>
+        <div class="rounded-xl bg-[#faf8f2] p-3 text-xs text-stone-600">
+          <i class="fa-solid fa-circle-info text-[#b8933f] mr-1"></i>
+          Check-ins before opening hours are logged as "Unsupervised Entry".
+        </div>
+        <button class="btn btn-gold" type="submit">
+          <i class="fa-solid fa-floppy-disk mr-1"></i> Save Preferences
+        </button>
       </form>
     </div>
 
-    <div class="card p-5 md:p-6"><div class="flex gap-3 items-center mb-5"><div class="w-10 h-10 rounded-xl bg-[#f4eddd] text-[#92702c] grid place-items-center"><i class="fa-solid fa-sliders"></i></div><div><h2 class="font-bold">Club preferences</h2><p class="text-xs text-stone-500">Configure your front desk.</p></div></div>
-      <form id="settingsForm" class="space-y-4" onsubmit="saveSettings(event)"><div><label class="field-label" for="clubName">Club name</label><input id="clubName" class="field" required></div><div class="grid grid-cols-2 gap-3"><div><label class="field-label" for="openingHour">Opening hour (24h)</label><select id="openingHour" class="field"></select></div><div><label class="field-label" for="currency">Fee currency label</label><input id="currency" class="field" maxlength="8" placeholder="ETB"></div></div><div class="rounded-xl bg-[#faf8f2] p-3 text-xs text-stone-600"><i class="fa-solid fa-circle-info text-[#b8933f] mr-1"></i>Check-ins before the opening hour are flagged as “Unsupervised Entry” in the audit log.</div><button class="btn btn-gold" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save Preferences</button></form>
+    <!-- Data Backup & Transfer -->
+    <div class="card p-5 md:p-6">
+      <div class="flex gap-3 items-center mb-5">
+        <div class="w-10 h-10 rounded-xl bg-[#f4eddd] text-[#92702c] grid place-items-center flex-shrink-0">
+          <i class="fa-solid fa-box-archive"></i>
+        </div>
+        <div>
+          <h2 class="font-bold text-base">Offline Backup & Export</h2>
+          <p class="text-xs text-stone-500">Download or restore offline JSON backups.</p>
+        </div>
+      </div>
+      <div class="space-y-3">
+        <button class="btn btn-dark w-full text-xs md:text-sm" onclick="exportBackup()">
+          <i class="fa-solid fa-file-export mr-1"></i> Download Data Backup (JSON)
+        </button>
+        <label class="btn btn-light w-full text-xs md:text-sm cursor-pointer">
+          <i class="fa-solid fa-file-import mr-1"></i> Restore from Backup File
+          <input type="file" id="importFile" accept=".json,application/json" class="hidden" onchange="importBackup(event)">
+        </label>
+      </div>
+      <div class="border-t border-[#eeeae1] my-4"></div>
+      <h3 class="font-bold text-xs uppercase tracking-wider text-stone-500 mb-2">Reset & Clear Data</h3>
+      <div class="grid grid-cols-2 gap-2">
+        <button class="btn btn-light text-xs py-2" onclick="resetDemo()">
+          <i class="fa-solid fa-wand-magic-sparkles mr-1"></i> Reset Demo
+        </button>
+        <button class="btn btn-danger text-xs py-2" onclick="clearAllData()">
+          <i class="fa-solid fa-triangle-exclamation mr-1"></i> Clear All
+        </button>
+      </div>
     </div>
-    <div class="card p-5 md:p-6"><div class="flex gap-3 items-center mb-5"><div class="w-10 h-10 rounded-xl bg-[#f4eddd] text-[#92702c] grid place-items-center"><i class="fa-solid fa-box-archive"></i></div><div><h2 class="font-bold">Data backup & transfer</h2><p class="text-xs text-stone-500">Move a backup between devices.</p></div></div>
-      <div class="space-y-3"><button class="btn btn-dark w-full" onclick="exportBackup()"><i class="fa-solid fa-file-export"></i> Download Data (JSON)</button><label class="btn btn-light w-full"><i class="fa-solid fa-file-import"></i> Import Data<input type="file" id="importFile" accept=".json,application/json" class="hidden" onchange="importBackup(event)"></label><p class="text-xs text-stone-500">Import supports merge or replace. Back up your current records first.</p></div>
-      <div class="border-t border-[#eeeae1] my-5"></div><h3 class="font-bold text-sm mb-2">Data management</h3><div class="space-y-2"><button class="btn btn-light w-full" onclick="resetDemo()"><i class="fa-solid fa-wand-magic-sparkles"></i> Reset to Demo Data</button><button class="btn btn-danger w-full" onclick="clearAllData()"><i class="fa-solid fa-triangle-exclamation"></i> Clear All Data</button></div>
+
+    <!-- System & Architecture Overview Card -->
+    <div class="card p-5 md:p-6">
+      <div class="eyebrow mb-1">Mobile & Cloud Status</div>
+      <h2 class="text-base font-bold mb-1">System Architecture</h2>
+      <p class="text-xs text-stone-500">Optimized for Android mobile app & front-desk operation.</p>
+      <div id="storageInfo" class="grid grid-cols-2 gap-2.5 mt-4"></div>
     </div>
-    <div class="card p-5 md:p-6 lg:col-span-2"><div class="eyebrow mb-2">Local & Cloud Hybrid Architecture</div><h2 class="text-lg font-bold">Storage & Sync Status</h2><p class="text-sm text-stone-600 mt-2 max-w-3xl">IRON-PASS uses a local-first hybrid architecture: all member profiles, photos, and entries are instantly saved locally in this browser for lightning-fast offline operation, and automatically synchronized to your Supabase PostgreSQL cloud database when connected.</p><div id="storageInfo" class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5"></div></div>
   </div>
 </section>
 </main>

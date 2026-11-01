@@ -16,3 +16,4 @@ The database schema and Row Level Security policies are located in [`supabase_sc
 
 ## Deployment
 This app requires zero build steps and deploys directly to Vercel as a static site.
+
