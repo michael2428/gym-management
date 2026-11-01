@@ -1237,30 +1237,23 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}button,a,select,
 <body>
 <div class="min-h-screen">
 <header class="bg-white border-b border-[#e9e5dc] sticky top-0 z-30">
-  <div class="max-w-[1500px] mx-auto px-3 sm:px-4 md:px-7">
-    <div class="py-2.5 md:py-3 flex items-center justify-between gap-2">
-      <!-- Brand & Logo -->
-      <div class="flex items-center gap-2 sm:gap-2.5 md:gap-3 min-w-0">
-        <div class="w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 rounded-xl bg-gradient-to-br from-[#B8933F] to-[#7A5C20] flex items-center justify-center text-white shadow-sm flex-shrink-0">
-          <i class="fa-solid fa-shield-halved text-base sm:text-lg md:text-xl"></i>
+  <div class="max-w-[1500px] mx-auto px-4 md:px-7">
+    <div class="py-3 flex items-center justify-between gap-3">
+      <!-- Brand & Logo matching reference image -->
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="w-11 h-11 md:w-12 md:h-12 rounded-2xl bg-gradient-to-br from-[#B8933F] to-[#7A5C20] flex items-center justify-center text-white shadow-md flex-shrink-0">
+          <i class="fa-solid fa-shield-halved text-xl md:text-2xl"></i>
         </div>
         <div class="min-w-0">
-          <h1 class="font-extrabold text-sm sm:text-base md:text-lg tracking-tight leading-none text-[#1C1C1E] truncate">IRON-PASS</h1>
-          <span class="text-[9px] sm:text-[10px] font-semibold uppercase tracking-wider text-[#99762E] block truncate mt-0.5">Elite Gym & ITF</span>
+          <h1 class="font-black text-xl md:text-2xl tracking-tight leading-none text-[#1C1C1E]">IRON-PASS</h1>
+          <span class="text-[9px] md:text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#99762E] block mt-1">ELITE GYM &amp; ITF TAEKWON-DO</span>
         </div>
       </div>
-      <!-- Header Actions (Mobile Optimized) -->
-      <div class="flex items-center gap-2 flex-shrink-0">
-        <!-- Account Role & Login Button (Manager vs Owner) -->
-        <button id="userRoleBadge" onclick="handleRoleBadgeClick()" class="flex items-center gap-1.5 px-2.5 py-1.5 md:px-3 md:py-2 rounded-xl text-xs font-bold border border-[#e9e5dc] bg-[#faf8f0] text-[#7a5c20] hover:bg-[#f2ead7] active:scale-95 transition shadow-xs flex-shrink-0" title="Account Role & Live Monitor">
-          <i id="userRoleIcon" class="fa-solid fa-user-tie text-[#b8933f] text-xs"></i>
-          <span id="userRoleLabel" class="text-xs">Manager</span>
-        </button>
-        <!-- Clean Scan Button -->
-        <button onclick="navigate('scanner')" class="bg-[#1C1C1E] text-white px-3 py-1.5 md:px-3.5 md:py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm active:scale-95 transition-transform flex-shrink-0">
-          <i class="fa-solid fa-qrcode text-[#D4AF37] text-xs sm:text-sm"></i>
-          <span class="hidden sm:inline">Scan Pass</span>
-          <span class="sm:hidden">Scan</span>
+      <!-- Right Side: Clean Scan Pass Pill Button matching reference image -->
+      <div class="flex items-center flex-shrink-0">
+        <button onclick="navigate('scanner')" class="bg-[#1C1C1E] text-white px-4 py-2 md:px-5 md:py-2.5 rounded-full text-xs md:text-sm font-bold flex items-center gap-2 shadow-sm active:scale-95 transition-transform flex-shrink-0">
+          <i class="fa-solid fa-qrcode text-[#D4AF37] text-sm md:text-base"></i>
+          <span>Scan Pass</span>
         </button>
       </div>
     </div>
@@ -1337,11 +1330,48 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}button,a,select,
 <section id="view-settings" class="view">
   <div class="mb-5 md:mb-6">
     <div class="eyebrow mb-1 md:mb-2">Mobile & App Control Center</div>
-    <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight">Settings & Preferences</h1>
-    <p class="text-xs md:text-sm text-stone-500 mt-1">Configure your gym name, opening hours, fee currency, and sync cloud data.</p>
+    <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight">Settings & Management</h1>
+    <p class="text-xs md:text-sm text-stone-500 mt-1">Configure your gym name, staff roles, live owner oversight, and cloud sync.</p>
   </div>
 
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5">
+    <!-- Staff & Owner Role Card (In Settings) -->
+    <div class="card p-5 md:p-6 border-2 border-[#b8933f]/30 bg-gradient-to-br from-white via-white to-[#faf7ee]">
+      <div class="flex items-center justify-between gap-3 mb-4">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-[#b8933f] to-[#7a5c20] text-white grid place-items-center shadow-sm flex-shrink-0">
+            <i id="settingsRoleIcon" class="fa-solid fa-user-tie text-lg"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="font-extrabold text-base">Staff & Owner Access</h2>
+              <span id="settingsRoleBadge" class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">Manager Mode</span>
+            </div>
+            <p class="text-xs text-stone-500 mt-0.5">Switch between Front Desk Staff and Remote Owner Live Monitor.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Current Role Display Box -->
+      <div id="settingsRoleContainer" class="rounded-xl border border-[#e8dfc9] bg-[#faf8f2] p-4 text-xs space-y-3 mb-4">
+        <!-- Rendered dynamically by renderSettingsRoleUI() -->
+      </div>
+
+      <!-- Owner PIN Change Section -->
+      <div class="border-t border-[#eeeae1] pt-3 text-xs">
+        <div class="flex items-center justify-between gap-2">
+          <div>
+            <label class="field-label text-[11px]" for="settingsOwnerPin">Owner Security PIN</label>
+            <p class="text-[10px] text-stone-400">Passcode to unlock Owner Live Oversight.</p>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <input id="settingsOwnerPin" type="password" maxlength="6" class="field text-xs py-1.5 font-bold tracking-widest text-center w-24" placeholder="1234">
+            <button type="button" class="btn btn-light btn-sm text-xs py-1.5 whitespace-nowrap" onclick="saveOwnerPin()"><i class="fa-solid fa-key mr-1"></i> Save PIN</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Cloud Database Status & Backup Card (Clean & Safe for Owner) -->
     <div class="card p-5 md:p-6 border border-[#e8dfc9] bg-gradient-to-br from-white via-white to-[#fbf8f0]">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-4">
@@ -1367,7 +1397,7 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}button,a,select,
           <i class="fa-solid fa-shield-halved text-[#b8933f]"></i>
           <span>Secure Cloud Protection</span>
         </div>
-        <p class="text-stone-500">All member records, pass scans, and payment history are automatically backed up to your dedicated cloud database. Offline local storage continues to work automatically.</p>
+        <p class="text-stone-500">All member records, pass scans, and payment history automatically sync to your dedicated Supabase database in real time. Offline local backup remains active automatically.</p>
       </div>
 
       <div class="flex flex-wrap items-center gap-2">
@@ -1403,7 +1433,7 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}button,a,select,
       <form id="settingsForm" class="space-y-4" onsubmit="saveSettings(event)">
         <div>
           <label class="field-label" for="clubName">Club / Gym Name</label>
-          <input id="clubName" class="field" required placeholder="e.g. IRON-PASS Elite Club">
+          <input id="clubName" class="field" required placeholder="e.g. woliso gym and itf">
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
@@ -1458,11 +1488,11 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}button,a,select,
     </div>
 
     <!-- System & Architecture Overview Card -->
-    <div class="card p-5 md:p-6">
+    <div class="card p-5 md:p-6 lg:col-span-2">
       <div class="eyebrow mb-1">Mobile & Cloud Status</div>
       <h2 class="text-base font-bold mb-1">System Architecture</h2>
       <p class="text-xs text-stone-500">Optimized for Android mobile app & front-desk operation.</p>
-      <div id="storageInfo" class="grid grid-cols-2 gap-2.5 mt-4"></div>
+      <div id="storageInfo" class="grid grid-cols-2 md:grid-cols-4 gap-2.5 mt-4"></div>
     </div>
   </div>
 </section>
@@ -2194,7 +2224,22 @@ function exportMembersCSV(){
 let searchTimer;function debouncedRenderMembers(){clearTimeout(searchTimer);searchTimer=setTimeout(()=>{memberPage=1;renderMembers()},180)}
 function openModal(title,body,foot=''){ $('modalTitle').textContent=title;$('modalBody').innerHTML=body;$('modalFoot').innerHTML=foot;$('modalOverlay').classList.add('open');document.body.style.overflow='hidden';setTimeout(()=> $('modalBody').querySelector('input,select,textarea,button')?.focus(),60)}
 function closeModal(){$('modalOverlay').classList.remove('open');document.body.style.overflow='';editingId=null;memberFormPhoto=''}
-function openMemberModal(id=null,forcedCategory=''){const m=id?members.find(x=>x.id===id):null;if(id&&!m)return;editingId=id;memberFormPhoto=m?.photo||'';const cat=m?.category||forcedCategory||'GYM';const form=`<form id="memberForm" class="space-y-4" onsubmit="saveMember(event)"><div class="flex items-center gap-4 p-3 rounded-xl bg-[#faf8f2]"><img id="photoPreview" class="w-16 h-16 rounded-xl object-cover border border-[#e7dfcc]" src="${m?.photo||avatarData(m?.fullName||'New Member')}" alt="Member photo preview"><div class="flex-1"><div class="font-bold text-sm">Member photo</div><p class="text-xs text-stone-500 mt-1">Optional · automatically resized and compressed.</p><label class="btn btn-light btn-sm mt-2 cursor-pointer"><i class="fa-solid fa-camera"></i> Upload photo<input id="memberPhoto" type="file" accept="image/*" class="hidden" onchange="handlePhoto(event)"></label></div></div><div class="grid grid-cols-1 sm:grid-cols-2 gap-4"><div><label class="field-label">Full name *</label><input name="fullName" class="field" required maxlength="100" value="${esc(m?.fullName||'')}"></div><div><label class="field-label">Category *</label><select name="category" id="formCategory" class="field" onchange="toggleITFFields()" required><option value="GYM" ${cat==='GYM'?'selected':''}>General Gym</option><option value="ITF" ${cat==='ITF'?'selected':''}>ITF Taekwon-Do</option></select></div><div><label class="field-label">Age *</label><input name="age" type="number" min="1" max="120" class="field" required value="${m?.age??''}"></div><div><label class="field-label">Phone *</label><input name="phone" class="field" required maxlength="30" value="${esc(m?.phone||'')}"></div><div id="guardianField" class="${cat==='ITF'?'':'hidden'}"><label class="field-label">Guardian name</label><input name="guardianName" class="field" value="${esc(m?.guardianName||'')}"></div><div id="beltField" class="${cat==='ITF'?'':'hidden'}"><label class="field-label">Belt rank</label><select name="beltRank" class="field">${BELTS.map(b=>`<option ${m?.beltRank===b?'selected':''}>${b}</option>`).join('')}</select></div><div><label class="field-label">Membership start *</label><input name="membershipStartDate" type="date" class="field" required value="${m?.membershipStartDate||todayISO()}"></div><div><label class="field-label">Membership expiry *</label><input name="membershipExpiryDate" type="date" class="field" required value="${m?.membershipExpiryDate||dateOffset(30)}"></div><div><label class="field-label">Monthly fee (${esc(settings.currency)}) *</label><input name="monthlyFee" type="number" min="0" step="0.01" class="field" required value="${m?.monthlyFee??(cat==='ITF'?500:800)}"></div><div class="sm:col-span-2"><label class="field-label">Notes (optional)</label><textarea name="notes" class="field" rows="2" maxlength="1000">${esc(m?.notes||'')}</textarea></div></div></form>`;openModal(m?'Edit Member':'Add New Member',form,`<button class="btn btn-light" onclick="closeModal()">Cancel</button><button class="btn btn-gold" form="memberForm" type="submit"><i class="fa-solid fa-floppy-disk"></i> ${m?'Save Changes':'Create Member'}</button>`)}
+function openMemberModal(id=null,forcedCategory=''){const m=id?members.find(x=>x.id===id):null;if(id&&!m)return;editingId=id;memberFormPhoto=m?.photo||'';const cat=m?.category||forcedCategory||'GYM';const form=`<form id="memberForm" class="space-y-4" onsubmit="saveMember(event)"><div class="flex items-center gap-4 p-3 rounded-xl bg-[#faf8f2]"><img id="photoPreview" class="w-16 h-16 rounded-xl object-cover border border-[#e7dfcc]" src="${m?.photo||avatarData(m?.fullName||'New Member')}" alt="Member photo preview"><div class="flex-1"><div class="font-bold text-sm">Member photo</div><p class="text-xs text-stone-500 mt-1">Optional · automatically resized and compressed.</p><label class="btn btn-light btn-sm mt-2 cursor-pointer"><i class="fa-solid fa-camera"></i> Upload photo<input id="memberPhoto" type="file" accept="image/*" class="hidden" onchange="handlePhoto(event)"></label></div></div><div class="grid grid-cols-1 sm:grid-cols-2 gap-4"><div><label class="field-label">Full name *</label><input name="fullName" class="field" required maxlength="100" value="${esc(m?.fullName||'')}"></div><div><label class="field-label">Category *</label><select name="category" id="formCategory" class="field" onchange="toggleITFFields()" required><option value="GYM" ${cat==='GYM'?'selected':''}>General Gym</option><option value="ITF" ${cat==='ITF'?'selected':''}>ITF Taekwon-Do</option></select></div><div><label class="field-label">Age *</label><input name="age" type="number" min="1" max="120" class="field" required value="${m?.age??''}"></div><div><label class="field-label">Phone *</label><input name="phone" class="field" required maxlength="30" value="${esc(m?.phone||'')}"></div><div id="guardianField" class="${cat==='ITF'?'':'hidden'}"><label class="field-label">Guardian name</label><input name="guardianName" class="field" value="${esc(m?.guardianName||'')}"></div><div id="beltField" class="${cat==='ITF'?'':'hidden'}"><label class="field-label">Belt rank</label><select name="beltRank" class="field">${BELTS.map(b=>`<option ${m?.beltRank===b?'selected':''}>${b}</option>`).join('')}</select></div><div>
+  <label class="field-label">Membership start *</label>
+  <input name="membershipStartDate" id="formStartDate" type="date" class="field" required value="${m?.membershipStartDate||todayISO()}" onchange="onStartDateChange(this.value)">
+</div>
+<div>
+  <div class="flex items-center justify-between mb-1">
+    <label class="field-label m-0">Membership expiry *</label>
+    <div class="flex items-center gap-1">
+      <button type="button" onclick="setFormDuration(30)" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-stone-100 hover:bg-stone-200 text-stone-700">+30d</button>
+      <button type="button" onclick="setFormDuration(90)" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-stone-100 hover:bg-stone-200 text-stone-700">+90d</button>
+      <button type="button" onclick="setFormDuration(180)" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-stone-100 hover:bg-stone-200 text-stone-700">+6Mo</button>
+      <button type="button" onclick="setFormDuration(365)" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-stone-100 hover:bg-stone-200 text-stone-700">+1Yr</button>
+    </div>
+  </div>
+  <input name="membershipExpiryDate" id="formExpiryDate" type="date" class="field" required value="${m?.membershipExpiryDate||dateOffset(30)}">
+</div><div><label class="field-label">Monthly fee (${esc(settings.currency)}) *</label><input name="monthlyFee" type="number" min="0" step="0.01" class="field" required value="${m?.monthlyFee??(cat==='ITF'?500:800)}"></div><div class="sm:col-span-2"><label class="field-label">Notes (optional)</label><textarea name="notes" class="field" rows="2" maxlength="1000">${esc(m?.notes||'')}</textarea></div></div></form>`;openModal(m?'Edit Member':'Add New Member',form,`<button class="btn btn-light" onclick="closeModal()">Cancel</button><button class="btn btn-gold" form="memberForm" type="submit"><i class="fa-solid fa-floppy-disk"></i> ${m?'Save Changes':'Create Member'}</button>`)}
 function toggleITFFields(){const yes=$('formCategory')?.value==='ITF';$('guardianField')?.classList.toggle('hidden',!yes);$('beltField')?.classList.toggle('hidden',!yes)}
 function handlePhoto(event){const file=event.target.files?.[0];if(!file)return;if(!file.type.startsWith('image/'))return toast('Please choose an image file.','error');const reader=new FileReader();reader.onload=()=>{const img=new Image();img.onload=()=>{try{const canvas=document.createElement('canvas'),scale=Math.min(1,300/img.width);canvas.width=Math.max(1,Math.round(img.width*scale));canvas.height=Math.max(1,Math.round(img.height*scale));const ctx=canvas.getContext('2d');ctx.drawImage(img,0,0,canvas.width,canvas.height);memberFormPhoto=canvas.toDataURL('image/jpeg',.7);$('photoPreview').src=memberFormPhoto}catch(e){toast('Could not process that photo.','error')}};img.onerror=()=>toast('Could not read that image.','error');img.src=reader.result};reader.readAsDataURL(file)}
 function saveMember(event){event.preventDefault();const form=new FormData(event.target),data=Object.fromEntries(form.entries());if(data.membershipExpiryDate<data.membershipStartDate)return toast('Expiry date cannot be before membership start date.','error');const old=editingId?members.find(m=>m.id===editingId):null;const id=old?.id||`IP-${String(Math.max(0,...members.map(m=>Number((m.id.match(/\d+$/)||[])[0]||0)))+1).padStart(4,'0')}`;const m={...(old||{}),id,fullName:data.fullName.trim(),photo:memberFormPhoto||old?.photo||avatarData(data.fullName),category:data.category,age:Number(data.age),phone:data.phone.trim(),guardianName:data.category==='ITF'?data.guardianName.trim():'',beltRank:data.category==='ITF'?data.beltRank:'',membershipStartDate:data.membershipStartDate,membershipExpiryDate:data.membershipExpiryDate,monthlyFee:Number(data.monthlyFee),notes:data.notes.trim(),createdAt:old?.createdAt||new Date().toISOString(),lastCheckIn:old?.lastCheckIn||null};if(old){members=members.map(x=>x.id===id?m:x);logAction('MEMBER_UPDATED',m,'Member profile updated')}else{members.push(m);logAction('MEMBER_CREATED',m,`New ${m.category} member created`)}persist();dbUpsertMember(m);closeModal();refreshCurrent();toast(old?'Member details updated.':'Member created successfully.','success')}
@@ -2222,10 +2267,104 @@ function renderAudit(){const q=($('auditSearch')?.value||'').toLowerCase(),actio
 function renderRollcall(){const list=members.filter(m=>m.category==='ITF'),q=($('rollcallSearch')?.value||'').toLowerCase(),filter=$('rollcallFilter')?.value||'';const todayPresent=new Set([...rollcallPresent].filter(id=>members.some(m=>m.id===id&&m.category==='ITF')));$('rollcallCount').innerHTML=`${todayPresent.size} / ${list.length} <span class="text-sm font-medium text-stone-500">present</span>`;$('rollcallProgress').style.width=`${list.length?Math.min(100,todayPresent.size/list.length*100):0}%`;const shown=list.filter(m=>(!q||[m.fullName,m.id,m.guardianName].some(v=>String(v||'').toLowerCase().includes(q)))&&(!filter||(filter==='unpaid'?statusOf(m)==='EXPIRED':filter==='present'?todayPresent.has(m.id):!todayPresent.has(m.id))));$('rollcallList').innerHTML=shown.length?shown.map(m=>{const present=todayPresent.has(m.id),expired=statusOf(m)==='EXPIRED';return `<button class="roster-row text-left ${present?'present':''}" onclick="togglePresent('${m.id}')"><span class="checkmark">${present?'<i class="fa-solid fa-check"></i>':''}</span><img src="${m.photo||avatarData(m.fullName)}" class="w-11 h-11 rounded-xl object-cover" alt=""><span class="flex-1 min-w-0"><span class="block font-bold text-sm">${esc(m.fullName)}</span><span class="block text-[10px] text-stone-500 mt-1">${esc(m.id)} · ${esc(m.beltRank||'Rank not set')}</span>${expired?'<span class="block text-[10px] text-red-600 font-extrabold mt-1"><i class="fa-solid fa-triangle-exclamation mr-1"></i>EXPIRED — fee overdue</span>':statusOf(m)==='EXPIRING'?'<span class="block text-[10px] text-amber-700 font-bold mt-1">Renewal due soon</span>':''}</span><span class="text-[10px] ${present?'text-emerald-700':'text-stone-400'} font-extrabold">${present?'PRESENT':'MARK PRESENT'}</span></button>`}).join(''):`<div class="card empty-state lg:col-span-2">No students match this filter.</div>`}
 function togglePresent(id){const m=members.find(x=>x.id===id);if(!m)return;if(rollcallPresent.has(id))rollcallPresent.delete(id);else{rollcallPresent.add(id);logAction('ROLL_CALL_MARKED',m,`Marked present for ITF class on ${todayISO()}`)}writeJSON('ip_rollcall_'+todayISO(),[...rollcallPresent]);dbSaveRollcall(todayISO(),rollcallPresent);renderRollcall()}
 function clearRollcall(){if(!confirm("Reset today's roll-call checklist? This only clears the on-screen attendance state; audit entries remain."))return;rollcallPresent.clear();writeJSON('ip_rollcall_'+todayISO(),[]);dbSaveRollcall(todayISO(),[]);renderRollcall();toast("Today's roll-call checklist reset.")}
+
+function onStartDateChange(val) {
+  const expiryInput = document.getElementById('formExpiryDate');
+  if (!expiryInput || !val) return;
+  const d = new Date(val + 'T00:00:00');
+  d.setDate(d.getDate() + 30);
+  expiryInput.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function setFormDuration(days) {
+  const startInput = document.getElementById('formStartDate');
+  const expiryInput = document.getElementById('formExpiryDate');
+  if (!expiryInput) return;
+  const startVal = startInput?.value || todayISO();
+  const d = new Date(startVal + 'T00:00:00');
+  d.setDate(d.getDate() + Number(days));
+  expiryInput.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  toast(`Expiry date set to ${expiryInput.value} (+${days} days).`, 'info');
+}
+
+function saveOwnerPin() {
+  const pin = ($('settingsOwnerPin')?.value || '').trim();
+  if (!pin || pin.length < 4) {
+    toast('Owner PIN must be at least 4 digits.', 'error');
+    return;
+  }
+  settings.ownerPin = pin;
+  persist();
+  dbSaveSettings(settings);
+  toast('Owner Security PIN saved.', 'success');
+}
+
+function renderSettingsRoleUI() {
+  const container = $('settingsRoleContainer');
+  const badge = $('settingsRoleBadge');
+  const icon = $('settingsRoleIcon');
+  if (!container) return;
+
+  const isOwner = currentUser.role === 'OWNER';
+  if (isOwner) {
+    if (badge) {
+      badge.className = 'text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300';
+      badge.textContent = '👑 Owner Mode Active';
+    }
+    if (icon) icon.className = 'fa-solid fa-crown text-lg';
+    container.innerHTML = `
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="font-extrabold text-sm text-[#1C1C1E] flex items-center gap-1.5">
+            <i class="fa-solid fa-crown text-[#b8933f]"></i>
+            <span>Logged in as Gym Owner</span>
+          </div>
+          <p class="text-stone-500 mt-0.5 text-xs">You have remote live oversight over all front desk door entries and member registrations.</p>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-[#e8dfc9]">
+        <button type="button" class="btn btn-gold btn-sm text-xs font-bold" onclick="openOwnerPortal()">
+          <i class="fa-solid fa-chart-line mr-1"></i> Open Live Door & Activity Oversight
+        </button>
+        <button type="button" class="btn btn-light btn-sm text-xs" onclick="switchToManager()">
+          <i class="fa-solid fa-user-tie mr-1"></i> Switch to Front Desk Manager
+        </button>
+      </div>
+    `;
+  } else {
+    if (badge) {
+      badge.className = 'text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300';
+      badge.textContent = '● Manager Active at Door';
+    }
+    if (icon) icon.className = 'fa-solid fa-user-tie text-lg';
+    container.innerHTML = `
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div>
+          <div class="font-extrabold text-sm text-[#1C1C1E] flex items-center gap-1.5">
+            <i class="fa-solid fa-user-tie text-[#7a5c20]"></i>
+            <span>Front Desk Manager Mode</span>
+          </div>
+          <p class="text-stone-500 mt-0.5 text-xs">Active for registering members, collecting fees, and scanning passes at the door.</p>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <label class="text-[11px] font-bold text-stone-500 whitespace-nowrap">Staff Name:</label>
+          <input id="managerNameField" class="field text-xs py-1 px-2 w-32" value="${esc(currentUser.name || 'Manager')}" onchange="updateManagerName(this.value)">
+        </div>
+      </div>
+      <div class="pt-2 border-t border-[#e8dfc9] flex items-center justify-between gap-2">
+        <span class="text-stone-500 text-[11px]">Are you the gym owner?</span>
+        <button type="button" class="btn btn-gold btn-sm text-xs font-bold" onclick="showOwnerLoginModal()">
+          <i class="fa-solid fa-lock-open mr-1"></i> Owner Login (Enter PIN)
+        </button>
+      </div>
+    `;
+  }
+}
+
 function renderSettings(){
   $('clubName').value=settings.clubName||'IRON-PASS Elite Club';
   $('openingHour').innerHTML=Array.from({length:24},(_,h)=>`<option value="${h}" ${Number(settings.openingHour)===h?'selected':''}>${String(h).padStart(2,'0')}:00</option>`).join('');
-  $('currency').value=settings.currency||'ETB';
+  $('currency').value=settings.currency||'ETB';if($('settingsOwnerPin'))$('settingsOwnerPin').value=settings.ownerPin||'1234';renderSettingsRoleUI();
   const cfg=getSupabaseConfig();
   if($('supabaseUrl'))$('supabaseUrl').value=cfg.url;
   if($('supabaseKey'))$('supabaseKey').value=cfg.key;
