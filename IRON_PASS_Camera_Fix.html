@@ -1722,7 +1722,7 @@ body.role-manager .role-banner-manager {
           <label class="field-label" style="font-size:11px;margin-bottom:4px;font-weight:700;color:#374151;" for="authEmailInput">Email Address</label>
           <div style="position:relative;">
             <i class="fa-solid fa-envelope" style="position:absolute;left:12px;top:12px;color:#9ca3af;font-size:12px;"></i>
-            <input id="authEmailInput" type="email" required class="field" style="padding-left:34px;font-size:13px;" placeholder="e.g. mike12dagm30@gmail.com" autocomplete="email">
+            <input id="authEmailInput" type="email" required class="field" style="padding-left:34px;font-size:13px;" placeholder="e.g. staff@gmail.com" autocomplete="email">
           </div>
         </div>
 
@@ -1775,7 +1775,7 @@ const KEYS={members:'ironpass_members',audit:'ironpass_auditlog',settings:'ironp
 const SCHEMA_VERSION=1;
 const BELTS=['White Belt','Yellow Stripe','Yellow Belt','Green Stripe','Green Belt','Blue Stripe','Blue Belt','Red Stripe','Red Belt','Black Belt 1st Dan','Black Belt 2nd Dan'];
 const $=id=>document.getElementById(id);
-let members=[],auditLog=[],settings={clubName:'Woliso Gym and ITF',openingHour:6,currency:'ETB',ownerEmail:'mike12dagm30@gmail.com',ownerPin:'1234',authorizedStaff:['mike12dagm30@gmail.com']};
+let members=[],auditLog=[],settings={clubName:'Woliso Gym and ITF',openingHour:6,currency:'ETB',ownerPin:'1234'};
 let currentView='dashboard',memberPage=1,pageSize=12,scanner=null,scannerRunning=false,editingId=null,memberFormPhoto='',rollcallPresent=new Set(),lastVerifiedId=null;
 let supabaseClient=null,supabaseStatus='disconnected',supabaseRealtimeChannel=null,supabaseConfig={url:'',key:'',realtime:true};
 const todayISO=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
@@ -2682,13 +2682,14 @@ function showOwnerLoginModal() {
           <i class="fa-solid fa-crown"></i>
         </div>
         <h3 class="font-extrabold text-lg text-[#1C1C1E]">Unlock Gym Owner Master Access</h3>
-        <p class="text-xs text-stone-500 mt-1">Enter your Owner Security PIN to unlock member registration, pass renewal, and financial settings.</p>
+        <p class="text-xs text-stone-500 mt-1">Enter your Owner Security Code to unlock member registration, pass renewal, and financial settings.</p>
       </div>
 
       <form onsubmit="handleOwnerPinSubmit(event)" class="space-y-3 pt-2">
         <div>
-          <label class="field-label text-xs">Owner Security PIN</label>
+          <label class="field-label text-xs">Master Owner Security PIN</label>
           <input id="modalOwnerPinInput" type="password" maxlength="6" class="field text-center font-bold tracking-widest text-base py-2" placeholder="1234" required autofocus>
+          <div class="text-[10px] text-stone-400 mt-1 text-center">Default Owner PIN is <b>1234</b> (can be changed in Settings)</div>
         </div>
         <div class="flex gap-2 pt-2">
           <button type="button" class="btn btn-light flex-1 text-xs" onclick="closeModal()">Cancel</button>
@@ -2707,13 +2708,12 @@ function handleOwnerPinSubmit(e) {
   if (entered === correct) {
     currentUser.role = 'OWNER';
     currentUser.name = 'Gym Owner';
-    currentUser.authorized = true;
     writeJSON('ironpass_current_user', currentUser);
     applyRoleDOMClasses();
     updateUserRoleUI();
     closeModal();
     refreshCurrent();
-    toast('👑 Owner mode unlocked. Full registration, renewal, and settings access enabled.', 'success');
+    toast('👑 Owner mode unlocked. Full registration, renewal, and financial access enabled.', 'success');
   } else {
     toast('Incorrect Owner PIN. Default PIN is 1234.', 'error');
     if ($('modalOwnerPinInput')) {
@@ -2723,94 +2723,34 @@ function handleOwnerPinSubmit(e) {
   }
 }
 
-function showStaffAuthorizationModal(email) {
-  const body = `
-    <div class="space-y-4">
-      <div class="text-center pb-2 border-b border-[#eeeae1]">
-        <div class="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 grid place-items-center mx-auto text-xl mb-2">
-          <i class="fa-solid fa-shield-halved"></i>
-        </div>
-        <h3 class="font-extrabold text-base text-[#1C1C1E]">Staff Authorization Required</h3>
-        <p class="text-xs text-stone-500 mt-1">Signed in as <b>${esc(email)}</b></p>
-      </div>
-      <div class="bg-[#faf8f2] border border-[#e8dfc9] rounded-xl p-3 text-xs text-stone-600 leading-relaxed">
-        To protect member records and privacy, this email is not yet registered on the staff list for <b>Woliso Gym and ITF</b>. Enter the Gym Security PIN below to authorize this device for Front Desk operations:
-      </div>
-      <form onsubmit="handleStaffAuthSubmit(event, '${esc(email)}')" class="space-y-3">
-        <div>
-          <label class="field-label text-xs">Gym Passcode (Default: 1234)</label>
-          <input id="staffPasscodeInput" type="password" maxlength="6" class="field text-center font-bold tracking-widest text-base py-2" placeholder="1234" required autofocus>
-        </div>
-        <div class="flex gap-2 pt-2">
-          <button type="button" class="btn btn-light flex-1 text-xs" onclick="handleSignOut()">Sign Out</button>
-          <button type="submit" class="btn btn-gold flex-1 text-xs font-bold">Authorize Staff Device</button>
-        </div>
-      </form>
-    </div>
-  `;
-  openModal('Staff Device Authorization', body, '');
-}
-
-function handleStaffAuthSubmit(e, email) {
-  if (e) e.preventDefault();
-  const entered = ($('staffPasscodeInput')?.value || '').trim();
-  const correct = String(settings.ownerPin || '1234');
-  if (entered === correct) {
-    if (!settings.authorizedStaff) settings.authorizedStaff = [];
-    if (!settings.authorizedStaff.includes(email)) {
-      settings.authorizedStaff.push(email);
-      persist();
-      dbSaveSettings(settings);
-    }
-    sessionStorage.setItem('woliso_staff_authorized_' + email, 'true');
-    currentUser.authorized = true;
-    currentUser.role = 'MANAGER';
-    writeJSON('ironpass_current_user', currentUser);
-    applyRoleDOMClasses();
-    closeModal();
-    refreshCurrent();
-    toast('Front desk device authorized for Woliso Gym.', 'success');
-  } else {
-    toast('Incorrect passcode. Ask the gym owner for access.', 'error');
-    if ($('staffPasscodeInput')) {
-      $('staffPasscodeInput').value = '';
-      $('staffPasscodeInput').focus();
-    }
-  }
+function switchToManager() {
+  currentUser.role = 'MANAGER';
+  currentUser.name = 'Front Desk Manager';
+  writeJSON('ironpass_current_user', currentUser);
+  applyRoleDOMClasses();
+  updateUserRoleUI();
+  refreshCurrent();
+  toast('Switched to Front Desk Manager mode. Registration and renewals are now locked.', 'info');
 }
 
 function applyUserAuthRole(user) {
   if (!user) {
-    currentUser = { role: 'MANAGER', name: 'Front Desk Staff', email: '', authorized: true };
+    currentUser = { role: 'MANAGER', name: 'Front Desk Staff', email: '' };
     applyRoleDOMClasses();
     return;
   }
 
-  const ownerEmail = (settings.ownerEmail || 'mike12dagm30@gmail.com').trim().toLowerCase();
-  const userEmail = (user.email || '').trim().toLowerCase();
+  const userEmail = (user.email || '').trim();
+  const savedUser = readJSON('ironpass_current_user', null);
 
-  if (userEmail === ownerEmail) {
-    currentUser = {
-      role: 'OWNER',
-      name: user.user_metadata?.full_name || 'Gym Owner',
-      email: userEmail,
-      authorized: true
-    };
-  } else {
-    const staffList = (settings.authorizedStaff || [ownerEmail]).map(e => String(e).trim().toLowerCase());
-    const isAuthorized = staffList.includes(userEmail) || sessionStorage.getItem('woliso_staff_authorized_' + userEmail) === 'true';
+  // If already unlocked as OWNER on this device, keep OWNER role; otherwise default to MANAGER
+  const isAlreadyOwner = savedUser && savedUser.role === 'OWNER';
 
-    currentUser = {
-      role: 'MANAGER',
-      name: user.user_metadata?.full_name || 'Front Desk Manager',
-      email: userEmail,
-      authorized: isAuthorized
-    };
-
-    if (!isAuthorized) {
-      setTimeout(() => showStaffAuthorizationModal(userEmail), 150);
-    }
-  }
+  currentUser = {
+    role: isAlreadyOwner ? 'OWNER' : 'MANAGER',
+    name: isAlreadyOwner ? 'Gym Owner' : (user.user_metadata?.full_name || 'Front Desk Staff'),
+    email: userEmail
+  };
 
   writeJSON('ironpass_current_user', currentUser);
   applyRoleDOMClasses();
@@ -2833,29 +2773,20 @@ function renderSettingsRoleUI() {
     if (icon) icon.className = 'fa-solid fa-crown text-lg';
     container.innerHTML = `
       <div class="space-y-3">
-        <div class="flex items-center justify-between pb-2 border-b border-[#eeeae1]">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-[#eeeae1]">
           <div>
             <div class="font-extrabold text-sm text-[#1C1C1E] flex items-center gap-1.5">
               <i class="fa-solid fa-crown text-[#b8933f]"></i>
-              <span>Logged in as Gym Owner (Head)</span>
+              <span>Gym Owner (Master Access Active)</span>
             </div>
-            <p class="text-stone-500 mt-0.5 text-xs">You have master access: member registration, membership renewals, pricing, and live door oversight.</p>
+            <p class="text-stone-500 mt-0.5 text-xs">You have master oversight: add members, renew passes, view revenue, and configure gym settings.</p>
           </div>
-          <button type="button" class="btn btn-light btn-sm text-xs font-semibold" onclick="switchToManager()">
-            <i class="fa-solid fa-user-tie mr-1"></i> Front Desk Mode
+          <button type="button" class="btn btn-light btn-sm text-xs font-semibold whitespace-nowrap self-start sm:self-center" onclick="switchToManager()">
+            <i class="fa-solid fa-lock mr-1"></i> Lock to Manager Mode
           </button>
         </div>
 
-        <div>
-          <label class="field-label text-[11px] font-bold text-stone-700" for="ownerEmailConfigInput">Master Owner Email</label>
-          <div class="flex gap-2">
-            <input id="ownerEmailConfigInput" class="field text-xs py-1.5" value="${esc(settings.ownerEmail || 'mike12dagm30@gmail.com')}" placeholder="owner@gmail.com">
-            <button type="button" class="btn btn-gold btn-sm text-xs whitespace-nowrap" onclick="saveOwnerEmail()"><i class="fa-solid fa-save mr-1"></i> Save</button>
-          </div>
-          <p class="text-[10px] text-stone-400 mt-1">Logging in with this email automatically grants full Owner privileges.</p>
-        </div>
-
-        <div class="pt-2 border-t border-[#eeeae1]">
+        <div class="pt-1">
           <button type="button" class="btn btn-gold btn-sm text-xs w-full font-bold" onclick="openOwnerPortal()">
             <i class="fa-solid fa-chart-line mr-1"></i> Open Live Door & Financial Oversight
           </button>
@@ -2873,12 +2804,12 @@ function renderSettingsRoleUI() {
         <div>
           <div class="font-extrabold text-sm text-[#1C1C1E] flex items-center gap-1.5">
             <i class="fa-solid fa-user-tie text-[#7a5c20]"></i>
-            <span>Front Desk Staff Mode Active</span>
+            <span>Front Desk Manager Mode Active</span>
           </div>
-          <p class="text-stone-500 mt-0.5 text-xs">Active for pass scanning at the door and ITF roll call. Member registration and fee renewals are reserved for the Gym Owner.</p>
+          <p class="text-stone-500 mt-0.5 text-xs">Active for scanning passes at the door and ITF roll call. Member registration and fee renewals are protected and restricted to the Gym Owner.</p>
         </div>
         <div class="pt-2 border-t border-[#e8dfc9] flex items-center justify-between gap-2">
-          <span class="text-stone-500 text-[11px]">Are you the gym owner?</span>
+          <span class="text-stone-500 text-[11px]">Gym Owner access?</span>
           <button type="button" class="btn btn-gold btn-sm text-xs font-bold" onclick="showOwnerLoginModal()">
             <i class="fa-solid fa-crown mr-1"></i> Enter Owner PIN
           </button>
@@ -2886,19 +2817,6 @@ function renderSettingsRoleUI() {
       </div>
     `;
   }
-}
-
-function saveOwnerEmail() {
-  const email = ($('ownerEmailConfigInput')?.value || '').trim().toLowerCase();
-  if (!email || !email.includes('@')) {
-    toast('Please enter a valid owner email address.', 'error');
-    return;
-  }
-  settings.ownerEmail = email;
-  persist();
-  dbSaveSettings(settings);
-  toast('Owner email saved as ' + email, 'success');
-  applyUserAuthRole(currentAuthUser);
 }
 
 // --- SUPABASE AUTHENTICATION & SECURITY GATE ---
