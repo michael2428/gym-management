@@ -1893,18 +1893,15 @@ function seedAudit(){return [];}
 
 // --- SUPABASE POSTGRESQL SCHEMA & INTEGRATION ---
 const SUPABASE_SQL_SCHEMA = `-- ====================================================================
--- IRON-PASS | Elite Gym & ITF Taekwon-Do Management App
--- Supabase Database Schema, Row-Level Security (RLS) & Realtime Setup
+-- WOLISO GYM & ITF | Multi-Account Privacy, Isolation & Security Schema
 -- ====================================================================
 -- Instructions:
--- 1. Create a free project at https://supabase.com
--- 2. In your Supabase dashboard, navigate to SQL Editor (left sidebar)
--- 3. Click "New query", paste this entire script, and click "Run"
--- 4. Go to Project Settings -> API to copy your Project URL & anon key
--- 5. Paste them into the IRON-PASS app under Settings -> Supabase Cloud
+-- 1. Open your Supabase Dashboard at https://supabase.com
+-- 2. Click 'SQL Editor' in the left menu -> 'New query'
+-- 3. Paste this entire script and click 'RUN'
 -- ====================================================================
 
--- 1. MEMBERS TABLE
+-- 1. CREATE TABLES (If not already created)
 CREATE TABLE IF NOT EXISTS public.members (
     id TEXT PRIMARY KEY,
     full_name TEXT NOT NULL,
@@ -1922,10 +1919,6 @@ CREATE TABLE IF NOT EXISTS public.members (
     last_check_in TIMESTAMPTZ
 );
 
-CREATE INDEX IF NOT EXISTS idx_members_category ON public.members(category);
-CREATE INDEX IF NOT EXISTS idx_members_expiry ON public.members(membership_expiry_date);
-
--- 2. AUDIT LOG TABLE
 CREATE TABLE IF NOT EXISTS public.audit_log (
     id TEXT PRIMARY KEY,
     member_id TEXT,
@@ -1935,82 +1928,140 @@ CREATE TABLE IF NOT EXISTS public.audit_log (
     details TEXT DEFAULT ''
 );
 
-CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON public.audit_log(timestamp DESC);
-CREATE INDEX IF NOT EXISTS idx_audit_member_id ON public.audit_log(member_id);
-
--- 3. ROLL CALL ATTENDANCE TABLE
 CREATE TABLE IF NOT EXISTS public.rollcall (
-    date DATE PRIMARY KEY,
+    date TEXT PRIMARY KEY,
     present_ids JSONB DEFAULT '[]'::jsonb,
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 4. CLUB SETTINGS TABLE
 CREATE TABLE IF NOT EXISTS public.settings (
     id TEXT PRIMARY KEY DEFAULT 'default',
-    club_name TEXT DEFAULT 'IRON-PASS Elite Club',
+    club_name TEXT DEFAULT 'WOLISO GYM & ITF',
     opening_hour INTEGER DEFAULT 6,
     currency TEXT DEFAULT 'ETB',
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-INSERT INTO public.settings (id, club_name, opening_hour, currency)
-VALUES ('default', 'IRON-PASS Elite Club', 6, 'ETB')
-ON CONFLICT (id) DO NOTHING;
+-- 2. ADD USER_ID COLUMN (Isolates data per logged-in Gmail/Email account)
+ALTER TABLE public.members ADD COLUMN IF NOT EXISTS user_id TEXT;
+ALTER TABLE public.audit_log ADD COLUMN IF NOT EXISTS user_id TEXT;
+ALTER TABLE public.rollcall ADD COLUMN IF NOT EXISTS user_id TEXT;
+ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS user_id TEXT;
 
--- 5. ENABLE ROW LEVEL SECURITY (RLS)
+-- 3. CREATE PERFORMANCE INDEXES
+CREATE INDEX IF NOT EXISTS idx_members_user_id ON public.members(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_user_id ON public.audit_log(user_id);
+
+-- 4. ENABLE ROW LEVEL SECURITY (RLS)
 ALTER TABLE public.members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.rollcall ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
 
--- 6. PUBLIC ACCESS POLICIES
+-- 5. DROP LEGACY PUBLIC POLICIES
 DROP POLICY IF EXISTS "Allow public read members" ON public.members;
-CREATE POLICY "Allow public read members" ON public.members FOR SELECT USING (true);
 DROP POLICY IF EXISTS "Allow public insert members" ON public.members;
-CREATE POLICY "Allow public insert members" ON public.members FOR INSERT WITH CHECK (true);
 DROP POLICY IF EXISTS "Allow public update members" ON public.members;
-CREATE POLICY "Allow public update members" ON public.members FOR UPDATE USING (true);
 DROP POLICY IF EXISTS "Allow public delete members" ON public.members;
-CREATE POLICY "Allow public delete members" ON public.members FOR DELETE USING (true);
-
 DROP POLICY IF EXISTS "Allow public read audit_log" ON public.audit_log;
-CREATE POLICY "Allow public read audit_log" ON public.audit_log FOR SELECT USING (true);
 DROP POLICY IF EXISTS "Allow public insert audit_log" ON public.audit_log;
-CREATE POLICY "Allow public insert audit_log" ON public.audit_log FOR INSERT WITH CHECK (true);
 DROP POLICY IF EXISTS "Allow public update audit_log" ON public.audit_log;
-CREATE POLICY "Allow public update audit_log" ON public.audit_log FOR UPDATE USING (true);
 DROP POLICY IF EXISTS "Allow public delete audit_log" ON public.audit_log;
-CREATE POLICY "Allow public delete audit_log" ON public.audit_log FOR DELETE USING (true);
-
 DROP POLICY IF EXISTS "Allow public read rollcall" ON public.rollcall;
-CREATE POLICY "Allow public read rollcall" ON public.rollcall FOR SELECT USING (true);
 DROP POLICY IF EXISTS "Allow public insert rollcall" ON public.rollcall;
-CREATE POLICY "Allow public insert rollcall" ON public.rollcall FOR INSERT WITH CHECK (true);
 DROP POLICY IF EXISTS "Allow public update rollcall" ON public.rollcall;
-CREATE POLICY "Allow public update rollcall" ON public.rollcall FOR UPDATE USING (true);
 DROP POLICY IF EXISTS "Allow public delete rollcall" ON public.rollcall;
-CREATE POLICY "Allow public delete rollcall" ON public.rollcall FOR DELETE USING (true);
 
-DROP POLICY IF EXISTS "Allow public read settings" ON public.settings;
-CREATE POLICY "Allow public read settings" ON public.settings FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Allow public insert settings" ON public.settings;
-CREATE POLICY "Allow public insert settings" ON public.settings FOR INSERT WITH CHECK (true);
-DROP POLICY IF EXISTS "Allow public update settings" ON public.settings;
-CREATE POLICY "Allow public update settings" ON public.settings FOR UPDATE USING (true);
+-- 6. CREATE STRICT PER-ACCOUNT ISOLATION POLICIES
+DROP POLICY IF EXISTS "Users access own members" ON public.members;
+CREATE POLICY "Users access own members" ON public.members
+FOR ALL TO authenticated
+USING (auth.uid()::text = user_id OR user_id IS NULL)
+WITH CHECK (auth.uid()::text = user_id);
 
--- 7. REALTIME REPLICATION
-DO $
+DROP POLICY IF EXISTS "Users access own audit" ON public.audit_log;
+CREATE POLICY "Users access own audit" ON public.audit_log
+FOR ALL TO authenticated
+USING (auth.uid()::text = user_id OR user_id IS NULL)
+WITH CHECK (auth.uid()::text = user_id);
+
+DROP POLICY IF EXISTS "Users access own rollcall" ON public.rollcall;
+CREATE POLICY "Users access own rollcall" ON public.rollcall
+FOR ALL TO authenticated
+USING (auth.uid()::text = user_id OR user_id IS NULL)
+WITH CHECK (auth.uid()::text = user_id);
+
+-- 7. REALTIME REPLICATION (Instant sync per account)
+DO $$
 BEGIN
   BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.members; EXCEPTION WHEN duplicate_object THEN END;
   BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.audit_log; EXCEPTION WHEN duplicate_object THEN END;
   BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.rollcall; EXCEPTION WHEN duplicate_object THEN END;
-  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.settings; EXCEPTION WHEN duplicate_object THEN END;
-END $;`;
+END $$;`;
+
+
+// --- MULTI-ACCOUNT TENANT DATA ISOLATION HELPERS ---
+let hasSupabaseUserIdColumn = false;
+
+function getAuthUserId() {
+  return currentAuthUser?.id || '';
+}
+
+function getAuthShortUid() {
+  const uid = getAuthUserId();
+  return uid ? uid.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) : 'anon';
+}
+
+function getScopedMemberDbId(localId) {
+  if (!localId) return '';
+  const shortUid = getAuthShortUid();
+  if (shortUid === 'anon') return localId;
+  if (localId.includes('_' + shortUid)) return localId;
+  return `${localId}_${shortUid}`;
+}
+
+function getLocalMemberId(dbId) {
+  if (!dbId) return '';
+  const idx = dbId.lastIndexOf('_');
+  if (idx > 0) return dbId.slice(0, idx);
+  return dbId;
+}
+
+function cleanNotes(notes) {
+  return (notes || '').replace(/\[acc:[a-zA-Z0-9_-]+\]/g, '').trim();
+}
+
+function embedOwnerTag(notes) {
+  const clean = cleanNotes(notes);
+  const uid = getAuthUserId();
+  if (!uid) return clean;
+  return clean ? `${clean} [acc:${uid}]` : `[acc:${uid}]`;
+}
+
+function isRowOwnedByCurrentUser(r) {
+  if (!currentAuthUser) return false;
+  const myUid = getAuthUserId();
+  const myShortUid = getAuthShortUid();
+
+  if (r.user_id && r.user_id === myUid) return true;
+  if (r.owner_id && r.owner_id === myUid) return true;
+  const match = (r.notes || r.details || '').match(/\[acc:([a-zA-Z0-9_-]+)\]/);
+  if (match && match[1] === myUid) return true;
+  if (r.id && r.id.endsWith('_' + myShortUid)) return true;
+  if (r.date && r.date.endsWith('_' + myShortUid)) return true;
+  return false;
+}
+
+function getUserStorageKey(baseKey) {
+  const shortUid = getAuthShortUid();
+  if (shortUid === 'anon') return baseKey;
+  return `${baseKey}_${shortUid}`;
+}
 
 function memberToRow(m){
-  return {
-    id: m.id,
+  const dbId = m.dbId || getScopedMemberDbId(m.id);
+  const row = {
+    id: dbId,
     full_name: m.fullName || '',
     photo: m.photo || null,
     category: m.category || 'GYM',
@@ -2021,15 +2072,20 @@ function memberToRow(m){
     membership_start_date: m.membershipStartDate || todayISO(),
     membership_expiry_date: m.membershipExpiryDate || todayISO(),
     monthly_fee: Number(m.monthlyFee || 0),
-    notes: m.notes || '',
+    notes: embedOwnerTag(m.notes || ''),
     created_at: m.createdAt || new Date().toISOString(),
     last_check_in: m.lastCheckIn || null
   };
+  if (hasSupabaseUserIdColumn && currentAuthUser?.id) {
+    row.user_id = currentAuthUser.id;
+  }
+  return row;
 }
 
 function memberFromRow(r){
   return {
-    id: r.id,
+    id: getLocalMemberId(r.id),
+    dbId: r.id,
     fullName: r.full_name ?? r.fullName ?? '',
     photo: r.photo ?? '',
     category: r.category ?? 'GYM',
@@ -2040,46 +2096,64 @@ function memberFromRow(r){
     membershipStartDate: r.membership_start_date ? String(r.membership_start_date).slice(0,10) : (r.membershipStartDate || todayISO()),
     membershipExpiryDate: r.membership_expiry_date ? String(r.membership_expiry_date).slice(0,10) : (r.membershipExpiryDate || todayISO()),
     monthlyFee: Number(r.monthly_fee ?? r.monthlyFee ?? 0),
-    notes: r.notes ?? '',
+    notes: cleanNotes(r.notes ?? ''),
     createdAt: r.created_at ?? r.createdAt ?? new Date().toISOString(),
     lastCheckIn: r.last_check_in ?? r.lastCheckIn ?? null
   };
 }
 
 function auditToRow(a){
-  return {
-    id: a.id || uid(),
-    member_id: a.memberId || null,
+  const shortUid = getAuthShortUid();
+  const baseId = a.id || uid();
+  const dbId = baseId.includes('_' + shortUid) ? baseId : `${baseId}_${shortUid}`;
+  const row = {
+    id: dbId,
+    member_id: a.memberId ? getScopedMemberDbId(a.memberId) : null,
     member_name: a.memberName || 'System',
     action: a.action,
     timestamp: a.timestamp || new Date().toISOString(),
-    details: a.details || ''
+    details: embedOwnerTag(a.details || '')
   };
+  if (hasSupabaseUserIdColumn && currentAuthUser?.id) {
+    row.user_id = currentAuthUser.id;
+  }
+  return row;
 }
 
 function auditFromRow(r){
   return {
     id: r.id,
-    memberId: r.member_id ?? r.memberId ?? null,
+    memberId: r.member_id ? getLocalMemberId(r.member_id) : (r.memberId || null),
     memberName: r.member_name ?? r.memberName ?? 'System',
     action: r.action,
     timestamp: r.timestamp,
-    details: r.details ?? ''
+    details: cleanNotes(r.details ?? '')
   };
 }
 
 async function dbUpsertMember(m){
   if(!supabaseClient)return;
   try{
-    const {error}=await supabaseClient.from('members').upsert(memberToRow(m),{onConflict:'id'});
-    if(error)console.error('Supabase member upsert error:',error);
+    const row = memberToRow(m);
+    let res = await supabaseClient.from('members').upsert(row, { onConflict: 'id' });
+    if (res.error && res.error.code === '42703' && row.user_id) {
+      hasSupabaseUserIdColumn = false;
+      delete row.user_id;
+      res = await supabaseClient.from('members').upsert(row, { onConflict: 'id' });
+    }
+    if (res.error) console.error('Supabase member upsert error:', res.error);
   }catch(e){console.error('Supabase member upsert error:',e)}
 }
 
 async function dbDeleteMember(id){
   if(!supabaseClient)return;
   try{
-    const {error}=await supabaseClient.from('members').delete().eq('id',id);
+    const dbId = getScopedMemberDbId(id);
+    let q = supabaseClient.from('members').delete().eq('id', dbId);
+    if (hasSupabaseUserIdColumn && currentAuthUser?.id) {
+      q = q.eq('user_id', currentAuthUser.id);
+    }
+    const {error}=await q;
     if(error)console.error('Supabase member delete error:',error);
   }catch(e){console.error('Supabase member delete error:',e)}
 }
@@ -2087,7 +2161,12 @@ async function dbDeleteMember(id){
 async function dbUpdateMemberCheckin(id,timestamp){
   if(!supabaseClient)return;
   try{
-    const {error}=await supabaseClient.from('members').update({last_check_in:timestamp}).eq('id',id);
+    const dbId = getScopedMemberDbId(id);
+    let q = supabaseClient.from('members').update({last_check_in:timestamp}).eq('id', dbId);
+    if (hasSupabaseUserIdColumn && currentAuthUser?.id) {
+      q = q.eq('user_id', currentAuthUser.id);
+    }
+    const {error}=await q;
     if(error)console.error('Supabase checkin update error:',error);
   }catch(e){console.error('Supabase checkin update error:',e)}
 }
@@ -2095,7 +2174,12 @@ async function dbUpdateMemberCheckin(id,timestamp){
 async function dbUpdateMemberRenewal(id,expiryDate){
   if(!supabaseClient)return;
   try{
-    const {error}=await supabaseClient.from('members').update({membership_expiry_date:expiryDate}).eq('id',id);
+    const dbId = getScopedMemberDbId(id);
+    let q = supabaseClient.from('members').update({membership_expiry_date:expiryDate}).eq('id', dbId);
+    if (hasSupabaseUserIdColumn && currentAuthUser?.id) {
+      q = q.eq('user_id', currentAuthUser.id);
+    }
+    const {error}=await q;
     if(error)console.error('Supabase renewal update error:',error);
   }catch(e){console.error('Supabase renewal update error:',e)}
 }
@@ -2103,34 +2187,60 @@ async function dbUpdateMemberRenewal(id,expiryDate){
 async function dbInsertAudit(entry){
   if(!supabaseClient)return;
   try{
-    const {error}=await supabaseClient.from('audit_log').insert(auditToRow(entry));
-    if(error)console.error('Supabase audit insert error:',error);
+    const row = auditToRow(entry);
+    let res = await supabaseClient.from('audit_log').insert(row);
+    if (res.error && res.error.code === '42703' && row.user_id) {
+      hasSupabaseUserIdColumn = false;
+      delete row.user_id;
+      res = await supabaseClient.from('audit_log').insert(row);
+    }
+    if (res.error) console.error('Supabase audit insert error:', res.error);
   }catch(e){console.error('Supabase audit insert error:',e)}
 }
 
 async function dbSaveRollcall(date,setOfIds){
   if(!supabaseClient)return;
   try{
-    const {error}=await supabaseClient.from('rollcall').upsert({
-      date:date,
-      present_ids:Array.from(setOfIds),
-      updated_at:new Date().toISOString()
-    },{onConflict:'date'});
-    if(error)console.error('Supabase rollcall error:',error);
+    const shortUid = getAuthShortUid();
+    const row = {
+      date: `${date}_${shortUid}`,
+      present_ids: Array.from(setOfIds),
+      updated_at: new Date().toISOString()
+    };
+    if (hasSupabaseUserIdColumn && currentAuthUser?.id) {
+      row.user_id = currentAuthUser.id;
+    }
+    let res = await supabaseClient.from('rollcall').upsert(row, { onConflict: 'date' });
+    if (res.error && res.error.code === '42703' && row.user_id) {
+      hasSupabaseUserIdColumn = false;
+      delete row.user_id;
+      res = await supabaseClient.from('rollcall').upsert(row, { onConflict: 'date' });
+    }
+    if(res.error)console.error('Supabase rollcall error:',res.error);
   }catch(e){console.error('Supabase rollcall error:',e)}
 }
 
 async function dbSaveSettings(s){
   if(!supabaseClient)return;
   try{
-    const {error}=await supabaseClient.from('settings').upsert({
-      id:'default',
-      club_name:s.clubName,
-      opening_hour:Number(s.openingHour),
-      currency:s.currency,
-      updated_at:new Date().toISOString()
-    },{onConflict:'id'});
-    if(error)console.error('Supabase settings error:',error);
+    const shortUid = getAuthShortUid();
+    const row = {
+      id: `settings_${shortUid}`,
+      club_name: s.clubName,
+      opening_hour: Number(s.openingHour),
+      currency: s.currency,
+      updated_at: new Date().toISOString()
+    };
+    if (hasSupabaseUserIdColumn && currentAuthUser?.id) {
+      row.user_id = currentAuthUser.id;
+    }
+    let res = await supabaseClient.from('settings').upsert(row, { onConflict: 'id' });
+    if (res.error && res.error.code === '42703' && row.user_id) {
+      hasSupabaseUserIdColumn = false;
+      delete row.user_id;
+      res = await supabaseClient.from('settings').upsert(row, { onConflict: 'id' });
+    }
+    if(res.error)console.error('Supabase settings error:',res.error);
   }catch(e){console.error('Supabase settings error:',e)}
 }
 
@@ -2184,6 +2294,10 @@ async function initSupabase(silent=true){
     supabaseStatus='connected';
     updateSupabaseStatusUI('connected');
     if(!silent)toast('Supabase connected successfully!','success');
+    try {
+      const { error: colErr } = await supabaseClient.from('members').select('user_id').limit(1);
+      hasSupabaseUserIdColumn = !colErr;
+    } catch(e) { hasSupabaseUserIdColumn = false; }
     setupSupabaseRealtime();
     setupSupabaseAuthListener();
     return true;
@@ -2208,108 +2322,131 @@ function setupSupabaseRealtime(){
       .channel('ironpass-db-realtime')
       .on('postgres_changes',{event:'*',schema:'public',table:'members'},payload=>{
         const {eventType,new:newRow,old:oldRow}=payload;
+        // DATA ISOLATION GUARD: Drop events that do not belong to current user
+        if(newRow && !isRowOwnedByCurrentUser(newRow)) return;
+        if(eventType==='DELETE' && oldRow && !isRowOwnedByCurrentUser(oldRow)) return;
+
         if(eventType==='INSERT'||eventType==='UPDATE'){
           if(newRow&&newRow.id){
             const m=memberFromRow(newRow);
-            const idx=members.findIndex(x=>x.id===m.id);
+            const idx=members.findIndex(x=>x.id===m.id || x.dbId===m.dbId);
             if(idx>=0)members[idx]=m;else members.unshift(m);
-            writeJSON(KEYS.members,members);
+            persist();
             refreshCurrent();
           }
         }else if(eventType==='DELETE'){
           if(oldRow&&oldRow.id){
-            members=members.filter(x=>x.id!==oldRow.id);
-            writeJSON(KEYS.members,members);
+            const localId=getLocalMemberId(oldRow.id);
+            members=members.filter(x=>x.id!==localId && x.dbId!==oldRow.id);
+            persist();
             refreshCurrent();
           }
         }
       })
       .on('postgres_changes',{event:'INSERT',schema:'public',table:'audit_log'},payload=>{
-        if(payload.new&&payload.new.id){
-          const entry=auditFromRow(payload.new);
-          if(!auditLog.some(a=>a.id===entry.id)){
-            auditLog.unshift(entry);
-            if(auditLog.length>5000)auditLog=auditLog.slice(0,5000);
-            writeJSON(KEYS.audit,auditLog);
-            if(currentView==='audit')renderAudit();
-            if(currentView==='dashboard')renderDashboard();
-          }
+        if(!payload.new || !isRowOwnedByCurrentUser(payload.new)) return;
+        const entry=auditFromRow(payload.new);
+        if(!auditLog.some(a=>a.id===entry.id)){
+          auditLog.unshift(entry);
+          if(auditLog.length>5000)auditLog=auditLog.slice(0,5000);
+          persist();
+          if(currentView==='audit')renderAudit();
+          if(currentView==='dashboard')renderDashboard();
         }
       })
       .on('postgres_changes',{event:'*',schema:'public',table:'rollcall'},payload=>{
-        if(payload.new&&payload.new.date===todayISO()){
+        if(!payload.new || !isRowOwnedByCurrentUser(payload.new)) return;
+        const shortUid = getAuthShortUid();
+        if(payload.new.date && (payload.new.date === todayISO() || payload.new.date === `${todayISO()}_${shortUid}`)){
           const ids=payload.new.present_ids||[];
           rollcallPresent=new Set(ids);
-          writeJSON('ip_rollcall_'+todayISO(),ids);
+          writeJSON(getUserStorageKey('ip_rollcall_'+todayISO()),ids);
           if(currentView==='rollcall')renderRollcall();
         }
       })
       .on('postgres_changes',{event:'*',schema:'public',table:'settings'},payload=>{
-        if(payload.new&&payload.new.id==='default'){
-          if(payload.new.club_name)settings.clubName=payload.new.club_name;
-          if(payload.new.opening_hour!==undefined)settings.openingHour=Number(payload.new.opening_hour);
-          if(payload.new.currency)settings.currency=payload.new.currency;
-          writeJSON(KEYS.settings,settings);
-          if(currentView==='settings')renderSettings();
-          if(currentView==='dashboard')renderDashboard();
-        }
+        if(!payload.new || !isRowOwnedByCurrentUser(payload.new)) return;
+        if(payload.new.club_name)settings.clubName=payload.new.club_name;
+        if(payload.new.opening_hour!==undefined)settings.openingHour=Number(payload.new.opening_hour);
+        if(payload.new.currency)settings.currency=payload.new.currency;
+        persist();
+        if(currentView==='settings')renderSettings();
       })
       .subscribe();
-  }catch(err){console.warn('Realtime subscription error:',err)}
+  }catch(e){console.error('Realtime setup error:',e)}
 }
 
 async function syncFromSupabase(silent=false){
   if(!supabaseClient)return false;
+  if(!currentAuthUser)return false;
+
   try{
-    if(!silent)toast('Syncing records from Supabase...','info');
+    if(!silent)toast('Syncing your gym records from Supabase...','info');
     updateSupabaseStatusUI('syncing');
 
-    const {data:memberRows,error:memberErr}=await supabaseClient
-      .from('members')
-      .select('*')
-      .order('id',{ascending:true});
-    if(memberErr)throw memberErr;
-    if(Array.isArray(memberRows)&&memberRows.length>0){
-      members=memberRows.map(memberFromRow);
-      writeJSON(KEYS.members,members);
+    // 1. Members: Query and filter strictly for this account
+    let memberQuery = supabaseClient.from('members').select('*');
+    if (hasSupabaseUserIdColumn && currentAuthUser?.id) {
+      memberQuery = memberQuery.eq('user_id', currentAuthUser.id);
+    }
+    const {data:memberRows,error:memberErr} = await memberQuery.order('id',{ascending:true});
+    if(memberErr){
+      if(memberErr.code === '42703'){
+        hasSupabaseUserIdColumn = false;
+        const retry = await supabaseClient.from('members').select('*').order('id',{ascending:true});
+        if(retry.error) throw retry.error;
+        const filtered = (retry.data || []).filter(isRowOwnedByCurrentUser);
+        members = filtered.map(memberFromRow);
+        persist();
+      } else {
+        throw memberErr;
+      }
+    } else {
+      const filtered = (memberRows || []).filter(isRowOwnedByCurrentUser);
+      members = filtered.map(memberFromRow);
+      persist();
     }
 
-    const {data:auditRows,error:auditErr}=await supabaseClient
-      .from('audit_log')
-      .select('*')
-      .order('timestamp',{ascending:false})
-      .limit(1000);
-    if(!auditErr&&Array.isArray(auditRows)&&auditRows.length>0){
-      auditLog=auditRows.map(auditFromRow);
-      writeJSON(KEYS.audit,auditLog);
+    // 2. Audit Log: Query and filter strictly for this account
+    let auditQuery = supabaseClient.from('audit_log').select('*');
+    if (hasSupabaseUserIdColumn && currentAuthUser?.id) {
+      auditQuery = auditQuery.eq('user_id', currentAuthUser.id);
+    }
+    const {data:auditRows,error:auditErr} = await auditQuery.order('timestamp',{ascending:false}).limit(1000);
+    if(!auditErr && Array.isArray(auditRows)){
+      const filtered = auditRows.filter(isRowOwnedByCurrentUser);
+      auditLog = filtered.map(auditFromRow);
+      persist();
     }
 
-    const today=todayISO();
-    const {data:rollRow,error:rollErr}=await supabaseClient
-      .from('rollcall')
-      .select('*')
-      .eq('date',today)
-      .maybeSingle();
-    if(!rollErr&&rollRow&&Array.isArray(rollRow.present_ids)){
-      rollcallPresent=new Set(rollRow.present_ids);
-      writeJSON('ip_rollcall_'+today,rollRow.present_ids);
+    // 3. Rollcall
+    const shortUid = getAuthShortUid();
+    const todayTarget = `${todayISO()}_${shortUid}`;
+    const {data:rollRows,error:rollErr} = await supabaseClient.from('rollcall').select('*');
+    if(!rollErr && Array.isArray(rollRows)){
+      const todayRoll = rollRows.find(r => r.date === todayTarget || (isRowOwnedByCurrentUser(r) && r.date.startsWith(todayISO())));
+      if(todayRoll && Array.isArray(todayRoll.present_ids)){
+        rollcallPresent = new Set(todayRoll.present_ids);
+        writeJSON(getUserStorageKey('ip_rollcall_'+todayISO()), todayRoll.present_ids);
+      }
     }
 
-    const {data:setRow,error:setErr}=await supabaseClient
-      .from('settings')
-      .select('*')
-      .eq('id','default')
-      .maybeSingle();
-    if(!setErr&&setRow){
-      if(setRow.club_name)settings.clubName=setRow.club_name;
-      if(setRow.opening_hour!==undefined&&setRow.opening_hour!==null)settings.openingHour=Number(setRow.opening_hour);
-      if(setRow.currency)settings.currency=setRow.currency;
-      writeJSON(KEYS.settings,settings);
+    // 4. Settings
+    const setTarget = `settings_${shortUid}`;
+    const {data:setRows} = await supabaseClient.from('settings').select('*');
+    if(Array.isArray(setRows)){
+      const mySettings = setRows.find(r => r.id === setTarget || isRowOwnedByCurrentUser(r));
+      if(mySettings){
+        if(mySettings.club_name) settings.clubName = mySettings.club_name;
+        if(mySettings.opening_hour !== undefined && mySettings.opening_hour !== null) settings.openingHour = Number(mySettings.opening_hour);
+        if(mySettings.currency) settings.currency = mySettings.currency;
+        persist();
+      }
     }
 
     updateSupabaseStatusUI('connected');
     refreshCurrent();
-    if(!silent)toast('Data synchronized with Supabase!','success');
+    if(!silent)toast('Account data synchronized with Supabase!','success');
     return true;
   }catch(err){
     console.error('Supabase sync error:',err);
@@ -2521,51 +2658,42 @@ function copySqlSchema(){
   }
 }
 
-function persist(){writeJSON(KEYS.members,members);writeJSON(KEYS.audit,auditLog);writeJSON(KEYS.settings,settings);writeJSON(KEYS.version,SCHEMA_VERSION)}
+function persist(){
+  writeJSON(getUserStorageKey(KEYS.members), members);
+  writeJSON(getUserStorageKey(KEYS.audit), auditLog);
+  writeJSON(getUserStorageKey(KEYS.settings), settings);
+  writeJSON(KEYS.version, SCHEMA_VERSION);
+}
 
 // Automatically purge old demo members ('Daniel Bekele', 'Hana Tesfaye', etc.)
 async function purgeLegacyDemoMembers() {
   const isDemo = name => ['Daniel Bekele','Hana Tesfaye','Samuel Girma','Mekdes Abebe','Yonas Tadesse','Rahel Alemu','Abel Worku','Selamawit Kebede','Nahom Getachew','Liya Desta','Biruk Mulugeta','Eden Kassa','Abel Solomon','Mimi Tadesse','Dawit Alemu','Sara Bekele','Yonatan Fikru','Hana Birhanu','Nahom Abebe','Liya Mekonnen','Samuel Dinku','Ruth Kebede','Yared Girma','Emanuel Tesfaye','Martha Worku','Daniel Mamo','Tigist Kassa','Robel Assefa','Selam Desta','Natnael Tola'].includes(name);
 
-  const hadDemo = members.some(m => isDemo(m.fullName) || (m.id && m.id.startsWith('IP-00')));
+  const hadDemo = members.some(m => isDemo(m.fullName) || (m.id && m.id.startsWith('IP-00') && !m.dbId));
   if (hadDemo) {
     console.log('Purging legacy demo members...');
-    members = members.filter(m => !isDemo(m.fullName) && !(m.id && m.id.startsWith('IP-00')));
+    members = members.filter(m => !isDemo(m.fullName) && !(m.id && m.id.startsWith('IP-00') && !m.dbId));
     auditLog = auditLog.filter(a => !isDemo(a.memberName));
     persist();
-    if (supabaseClient) {
-      try {
-        await supabaseClient.from('members').delete().ilike('id', 'IP-00%');
-        await supabaseClient.from('audit_log').delete().ilike('member_id', 'IP-00%');
-      } catch (e) {
-        console.warn('Purge error:', e);
-      }
-    }
     refreshCurrent();
   }
 }
 
 function loadData(){
-  rollcallPresent=new Set(readJSON('ip_rollcall_'+todayISO(),[]));
+  rollcallPresent=new Set(readJSON(getUserStorageKey('ip_rollcall_'+todayISO()),[]));
   try{
-    const loaded=readJSON(KEYS.members,null);
-    if(loaded===null || (Array.isArray(loaded) && loaded.length===0)){
-      members=seedData();
-      auditLog=seedAudit();
-      persist();
-    }else{
-      members=Array.isArray(loaded)?loaded.filter(m=>m&&m.id&&m.fullName):[];
-      auditLog=readJSON(KEYS.audit,[]);
-      if(!Array.isArray(auditLog))auditLog=[];
-      settings={...settings,...readJSON(KEYS.settings,{})};
-      if(!localStorage.getItem(KEYS.version))writeJSON(KEYS.version,SCHEMA_VERSION);
-    }
+    const loaded=readJSON(getUserStorageKey(KEYS.members),null);
+    members=Array.isArray(loaded)?loaded.filter(m=>m&&m.id&&m.fullName):[];
+    auditLog=readJSON(getUserStorageKey(KEYS.audit),[]);
+    if(!Array.isArray(auditLog))auditLog=[];
+    settings={...settings,...readJSON(getUserStorageKey(KEYS.settings),{})};
+    if(!localStorage.getItem(KEYS.version))writeJSON(KEYS.version,SCHEMA_VERSION);
   }catch(e){
-    members=seedData();
-    auditLog=seedAudit();
-    toast('Loaded with default data. Storage notice: changes may not persist if browser storage is restricted.','info');
+    members=[];
+    auditLog=[];
   }
 }
+
 function logAction(action,m,details=''){
   const staff = currentUser.role === 'OWNER' ? 'Owner' : (currentUser.name || 'Manager');
   const staffDetail = details ? `${details} (by ${staff})` : `Processed by ${staff}`;
@@ -2706,10 +2834,10 @@ function openMemberModal(id=null,forcedCategory=''){if(!isOwner()){toast('Access
 </div><div><label class="field-label">Monthly fee (${esc(settings.currency)}) *</label><input name="monthlyFee" type="number" min="0" step="0.01" class="field" required value="${m?.monthlyFee??(cat==='ITF'?500:800)}"></div><div class="sm:col-span-2"><label class="field-label">Notes (optional)</label><textarea name="notes" class="field" rows="2" maxlength="1000">${esc(m?.notes||'')}</textarea></div></div></form>`;openModal(m?'Edit Member':'Add New Member',form,`<button class="btn btn-light" onclick="closeModal()">Cancel</button><button class="btn btn-gold" form="memberForm" type="submit"><i class="fa-solid fa-floppy-disk"></i> ${m?'Save Changes':'Create Member'}</button>`)}
 function toggleITFFields(){const yes=$('formCategory')?.value==='ITF';$('guardianField')?.classList.toggle('hidden',!yes);$('beltField')?.classList.toggle('hidden',!yes)}
 function handlePhoto(event){const file=event.target.files?.[0];if(!file)return;if(!file.type.startsWith('image/'))return toast('Please choose an image file.','error');const reader=new FileReader();reader.onload=()=>{const img=new Image();img.onload=()=>{try{const canvas=document.createElement('canvas'),scale=Math.min(1,300/img.width);canvas.width=Math.max(1,Math.round(img.width*scale));canvas.height=Math.max(1,Math.round(img.height*scale));const ctx=canvas.getContext('2d');ctx.drawImage(img,0,0,canvas.width,canvas.height);memberFormPhoto=canvas.toDataURL('image/jpeg',.7);$('photoPreview').src=memberFormPhoto}catch(e){toast('Could not process that photo.','error')}};img.onerror=()=>toast('Could not read that image.','error');img.src=reader.result};reader.readAsDataURL(file)}
-function saveMember(event){event.preventDefault();if(!isOwner()){toast('Access Denied: Only the Gym Owner has permission to register or edit members.','error');return;}const form=new FormData(event.target),data=Object.fromEntries(form.entries());if(data.membershipExpiryDate<data.membershipStartDate)return toast('Expiry date cannot be before membership start date.','error');const old=editingId?members.find(m=>m.id===editingId):null;const id=old?.id||`IP-${String(Math.max(0,...members.map(m=>Number((m.id.match(/\d+$/)||[])[0]||0)))+1).padStart(4,'0')}`;const m={...(old||{}),id,fullName:data.fullName.trim(),photo:memberFormPhoto||old?.photo||avatarData(data.fullName),category:data.category,age:Number(data.age),phone:data.phone.trim(),guardianName:data.category==='ITF'?data.guardianName.trim():'',beltRank:data.category==='ITF'?data.beltRank:'',membershipStartDate:data.membershipStartDate,membershipExpiryDate:data.membershipExpiryDate,monthlyFee:Number(data.monthlyFee),notes:data.notes.trim(),createdAt:old?.createdAt||new Date().toISOString(),lastCheckIn:old?.lastCheckIn||null};if(old){members=members.map(x=>x.id===id?m:x);logAction('MEMBER_UPDATED',m,'Member profile updated')}else{members.push(m);logAction('MEMBER_CREATED',m,`New ${m.category} member created`)}persist();dbUpsertMember(m);closeModal();refreshCurrent();toast(old?'Member details updated.':'Member created successfully.','success')}
+function saveMember(event){event.preventDefault();if(!isOwner()){toast('Access Denied: Only the Gym Owner has permission to register or edit members.','error');return;}const form=new FormData(event.target),data=Object.fromEntries(form.entries());if(data.membershipExpiryDate<data.membershipStartDate)return toast('Expiry date cannot be before membership start date.','error');const old=editingId?members.find(m=>m.id===editingId || m.dbId===editingId):null;const id=old?.id||`IP-${String(Math.max(0,...members.map(m=>Number((m.id.match(/\d+$/)||[])[0]||0)))+1).padStart(4,'0')}`;const dbId=old?.dbId||getScopedMemberDbId(id);const m={...(old||{}),id,dbId,fullName:data.fullName.trim(),photo:memberFormPhoto||old?.photo||avatarData(data.fullName),category:data.category,age:Number(data.age),phone:data.phone.trim(),guardianName:data.category==='ITF'?data.guardianName.trim():'',beltRank:data.category==='ITF'?data.beltRank:'',membershipStartDate:data.membershipStartDate,membershipExpiryDate:data.membershipExpiryDate,monthlyFee:Number(data.monthlyFee),notes:data.notes.trim(),createdAt:old?.createdAt||new Date().toISOString(),lastCheckIn:old?.lastCheckIn||null};if(old){members=members.map(x=>(x.id===id || x.dbId===dbId)?m:x);logAction('MEMBER_UPDATED',m,'Member profile updated')}else{members.push(m);logAction('MEMBER_CREATED',m,`New ${m.category} member created`)}persist();dbUpsertMember(m);closeModal();refreshCurrent();toast(old?'Member details updated.':'Member created successfully.','success')}
 function refreshCurrent(){renderDashboard();if(currentView==='gym')renderCategory('GYM');if(currentView==='itf')renderCategory('ITF');if(currentView==='members')renderMembers();if(currentView==='rollcall')renderRollcall();if(currentView==='settings')renderSettings()}
-function deleteMember(id){if(!isOwner()){toast('Access Denied: Only the Gym Owner has permission to delete member records.','error');return;}const m=members.find(x=>x.id===id);if(!m)return;if(!confirm(`Delete ${m.fullName} (${m.id})? This cannot be undone.`))return;members=members.filter(x=>x.id!==id);logAction('MEMBER_DELETED',m,'Member record deleted');persist();dbDeleteMember(id);refreshCurrent();toast('Member deleted.','success')}
-function viewMember(id){const m=members.find(x=>x.id===id);if(!m)return;const body=`<div class="flex flex-col sm:flex-row gap-5"><img src="${m.photo||avatarData(m.fullName)}" class="w-24 h-24 rounded-2xl object-cover border border-[#e9e5dc]" alt="${esc(m.fullName)}"><div class="flex-1"><div class="flex flex-wrap items-center gap-2"><h3 class="text-xl font-extrabold">${esc(m.fullName)}</h3>${statusBadge(m)}</div><div class="text-xs text-stone-500 mt-1">${esc(m.id)} · ${m.category==='ITF'?'ITF Taekwon-Do':'General Gym'} · Age ${m.age}</div><div class="grid grid-cols-2 gap-4 mt-5">${detail('Phone',m.phone)}${detail('Monthly fee',fmtMoney(m.monthlyFee))}${detail('Start date',fmtDate(m.membershipStartDate))}${detail('Expiry date',fmtDate(m.membershipExpiryDate))}${m.category==='ITF'?detail('Belt rank',m.beltRank||'—')+detail('Guardian',m.guardianName||'—'):''}${detail('Time remaining',daysLabel(m))}${detail('Last check-in',fmtTime(m.lastCheckIn))}</div>${m.notes?`<div class="mt-4 text-sm text-stone-600"><b>Notes:</b> ${esc(m.notes)}</div>`:''}</div></div>`;const footBtns = isOwner()
+function deleteMember(id){if(!isOwner()){toast('Access Denied: Only the Gym Owner has permission to delete member records.','error');return;}const m=members.find(x=>x.id===id||x.dbId===id);if(!m)return;if(!confirm(`Delete ${m.fullName} (${m.id})? This cannot be undone.`))return;members=members.filter(x=>x.id!==id && x.dbId!==id);logAction('MEMBER_DELETED',m,'Member record deleted');persist();dbDeleteMember(id);refreshCurrent();toast('Member deleted.','success')}
+function viewMember(id){const m=members.find(x=>x.id===id||x.dbId===id);if(!m)return;const body=`<div class="flex flex-col sm:flex-row gap-5"><img src="${m.photo||avatarData(m.fullName)}" class="w-24 h-24 rounded-2xl object-cover border border-[#e9e5dc]" alt="${esc(m.fullName)}"><div class="flex-1"><div class="flex flex-wrap items-center gap-2"><h3 class="text-xl font-extrabold">${esc(m.fullName)}</h3>${statusBadge(m)}</div><div class="text-xs text-stone-500 mt-1">${esc(m.id)} · ${m.category==='ITF'?'ITF Taekwon-Do':'General Gym'} · Age ${m.age}</div><div class="grid grid-cols-2 gap-4 mt-5">${detail('Phone',m.phone)}${detail('Monthly fee',fmtMoney(m.monthlyFee))}${detail('Start date',fmtDate(m.membershipStartDate))}${detail('Expiry date',fmtDate(m.membershipExpiryDate))}${m.category==='ITF'?detail('Belt rank',m.beltRank||'—')+detail('Guardian',m.guardianName||'—'):''}${detail('Time remaining',daysLabel(m))}${detail('Last check-in',fmtTime(m.lastCheckIn))}</div>${m.notes?`<div class="mt-4 text-sm text-stone-600"><b>Notes:</b> ${esc(m.notes)}</div>`:''}</div></div>`;const footBtns = isOwner()
   ? `<button class="btn btn-light" onclick="closeModal()">Close</button>
      <button class="btn btn-light" onclick="showDossier('${m.id}')"><i class="fa-solid fa-file-lines"></i> Proof Dossier</button>
      <button class="btn btn-light" onclick="showPass('${m.id}')"><i class="fa-solid fa-qrcode"></i> QR Pass</button>
@@ -2720,8 +2848,8 @@ function viewMember(id){const m=members.find(x=>x.id===id);if(!m)return;const bo
      <button class="btn btn-light" onclick="showPass('${m.id}')"><i class="fa-solid fa-qrcode"></i> QR Pass</button>`;
 openModal('Member Profile',body,footBtns)}
 function detail(k,v){return `<div><div class="text-[10px] uppercase tracking-wider font-bold text-stone-400">${esc(k)}</div><div class="text-sm font-semibold mt-1 break-words">${esc(v)}</div></div>`}
-function openRenewModal(id){if(!isOwner()){toast('Access Denied: Only the Gym Owner has permission to renew memberships and collect fees.','error');return;}const m=members.find(x=>x.id===id);if(!m)return;const body=`<div class="flex items-center gap-3 mb-5"><img src="${m.photo||avatarData(m.fullName)}" class="member-avatar" alt=""><div><div class="font-bold">${esc(m.fullName)}</div><div class="text-xs text-stone-500">${esc(m.id)} · Current expiry ${fmtDate(m.membershipExpiryDate)}</div></div></div><form id="renewForm" onsubmit="renewMember(event,'${m.id}')" class="space-y-4"><div><label class="field-label">Extension plan</label><select class="field" name="days"><option value="30">30 days</option><option value="60">60 days</option><option value="90">90 days</option><option value="180">180 days</option><option value="365">365 days</option></select></div><div><label class="field-label">Extend from</label><div class="space-y-2 text-sm"><label class="flex items-center gap-2"><input type="radio" name="base" value="today" checked> Today (${fmtDate(todayISO())})</label><label class="flex items-center gap-2"><input type="radio" name="base" value="expiry"> Current expiry (${fmtDate(m.membershipExpiryDate)})</label></div></div><div class="text-xs text-stone-500 rounded-xl bg-[#faf8f2] p-3">New expiry date is calculated automatically. The member's status updates immediately.</div></form>`;openModal('Renew Membership',body,`<button class="btn btn-light" onclick="closeModal()">Cancel</button><button class="btn btn-gold" type="submit" form="renewForm"><i class="fa-solid fa-arrows-rotate"></i> Confirm Renewal</button>`)}
-function renewMember(event,id){event.preventDefault();if(!isOwner()){toast('Access Denied: Only the Gym Owner has permission to renew memberships.','error');return;}const m=members.find(x=>x.id===id);if(!m)return;const fd=new FormData(event.target),days=Number(fd.get('days')),base=fd.get('base')==='expiry'&&m.membershipExpiryDate>todayISO()?new Date(m.membershipExpiryDate+'T00:00:00'):new Date(todayISO()+'T00:00:00');base.setDate(base.getDate()+days);m.membershipExpiryDate=`${base.getFullYear()}-${String(base.getMonth()+1).padStart(2,'0')}-${String(base.getDate()).padStart(2,'0')}`;logAction('MEMBER_RENEWED',m,`Membership renewed for ${days} days; new expiry ${m.membershipExpiryDate}`);persist();dbUpdateMemberRenewal(id,m.membershipExpiryDate);closeModal();refreshCurrent();toast(`Membership renewed through ${fmtDate(m.membershipExpiryDate)}.`,'success')}
+function openRenewModal(id){if(!isOwner()){toast('Access Denied: Only the Gym Owner has permission to renew memberships and collect fees.','error');return;}const m=members.find(x=>x.id===id||x.dbId===id);if(!m)return;const body=`<div class="flex items-center gap-3 mb-5"><img src="${m.photo||avatarData(m.fullName)}" class="member-avatar" alt=""><div><div class="font-bold">${esc(m.fullName)}</div><div class="text-xs text-stone-500">${esc(m.id)} · Current expiry ${fmtDate(m.membershipExpiryDate)}</div></div></div><form id="renewForm" onsubmit="renewMember(event,'${m.id}')" class="space-y-4"><div><label class="field-label">Extension plan</label><select class="field" name="days"><option value="30">30 days</option><option value="60">60 days</option><option value="90">90 days</option><option value="180">180 days</option><option value="365">365 days</option></select></div><div><label class="field-label">Extend from</label><div class="space-y-2 text-sm"><label class="flex items-center gap-2"><input type="radio" name="base" value="today" checked> Today (${fmtDate(todayISO())})</label><label class="flex items-center gap-2"><input type="radio" name="base" value="expiry"> Current expiry (${fmtDate(m.membershipExpiryDate)})</label></div></div><div class="text-xs text-stone-500 rounded-xl bg-[#faf8f2] p-3">New expiry date is calculated automatically. The member's status updates immediately.</div></form>`;openModal('Renew Membership',body,`<button class="btn btn-light" onclick="closeModal()">Cancel</button><button class="btn btn-gold" type="submit" form="renewForm"><i class="fa-solid fa-arrows-rotate"></i> Confirm Renewal</button>`)}
+function renewMember(event,id){event.preventDefault();if(!isOwner()){toast('Access Denied: Only the Gym Owner has permission to renew memberships.','error');return;}const m=members.find(x=>x.id===id||x.dbId===id);if(!m)return;const fd=new FormData(event.target),days=Number(fd.get('days')),base=fd.get('base')==='expiry'&&m.membershipExpiryDate>todayISO()?new Date(m.membershipExpiryDate+'T00:00:00'):new Date(todayISO()+'T00:00:00');base.setDate(base.getDate()+days);m.membershipExpiryDate=`${base.getFullYear()}-${String(base.getMonth()+1).padStart(2,'0')}-${String(base.getDate()).padStart(2,'0')}`;logAction('MEMBER_RENEWED',m,`Membership renewed for ${days} days; new expiry ${m.membershipExpiryDate}`);persist();dbUpdateMemberRenewal(id,m.membershipExpiryDate);closeModal();refreshCurrent();toast(`Membership renewed through ${fmtDate(m.membershipExpiryDate)}.`,'success')}
 function showPass(id){const m=members.find(x=>x.id===id);if(!m)return;const body=`<div class="flex flex-col items-center gap-4"><div class="pass-card" id="passCard"><div class="flex justify-between items-start relative"><div><div class="pass-brand"><i class="fa-solid fa-shield-halved mr-1"></i> WOLISO GYM &amp; ITF</div><div class="text-[9px] uppercase tracking-[.17em] text-stone-500 mt-1">Elite club membership</div></div><div class="text-[9px] font-extrabold tracking-widest text-[#9a7836]">${m.category}</div></div><div class="flex gap-3 items-center mt-6 relative"><img src="${m.photo||avatarData(m.fullName)}" class="pass-photo" alt="${esc(m.fullName)}"><div class="min-w-0"><div class="text-lg font-extrabold leading-tight">${esc(m.fullName)}</div><div class="text-xs text-stone-500 mt-1">${esc(m.id)}</div><div class="text-[10px] font-bold text-[#8c6a27] mt-2">${m.category==='ITF'?esc(m.beltRank||'ITF STUDENT'):'GENERAL GYM'}</div></div></div><div class="flex items-end justify-between mt-5 pt-4 border-t border-[#e9dfc8] relative"><div><div class="text-[9px] uppercase tracking-widest text-stone-400">Valid through</div><div class="text-xs font-extrabold mt-1">${fmtDate(m.membershipExpiryDate)}</div><div class="mt-2">${statusBadge(m)}</div></div><div id="passQr" class="qr-box"></div></div><div class="text-[8px] text-stone-400 tracking-widest mt-4 relative">PRESENT THIS PASS AT THE FRONT DESK</div></div><p class="text-xs text-center text-stone-500 max-w-sm">QR code contains the member ID only. Verification uses the records stored in this browser.</p></div>`;openModal('Digital Membership Pass',body,`<button class="btn btn-light" onclick="closeModal()">Close</button><button class="btn btn-light" onclick="showDossier('${m.id}')"><i class="fa-solid fa-file-lines"></i> Proof Dossier</button><button class="btn btn-gold" onclick="downloadPass('${m.id}')"><i class="fa-solid fa-download"></i> Download Pass PNG</button>`);setTimeout(()=>{const q=$('passQr');if(q&&window.QRCode){q.innerHTML='';new QRCode(q,{text:m.id,width:108,height:108,colorDark:'#1c1c1e',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M})}else if(q)q.innerHTML=`<span class="text-[10px] text-center">QR library unavailable<br>${esc(m.id)}</span>`},40)}
 function drawQRToCanvas(text,canvas,size=120){if(!window.QRCode)return Promise.reject(new Error('QR library unavailable'));return new Promise((resolve,reject)=>{const temp=document.createElement('div');temp.style.position='fixed';temp.style.left='-9999px';document.body.appendChild(temp);try{new QRCode(temp,{text,width:size,height:size,correctLevel:QRCode.CorrectLevel.M});setTimeout(()=>{const source=temp.querySelector('canvas')||temp.querySelector('img');if(!source){temp.remove();reject(new Error('QR generation failed'));return}const ctx=canvas.getContext('2d');if(source.tagName==='CANVAS')ctx.drawImage(source,0,0,size,size);else{const img=new Image();img.onload=()=>{ctx.drawImage(img,0,0,size,size);temp.remove();resolve()};img.onerror=()=>{temp.remove();reject(new Error('QR image failed'))};img.src=source.src;return}temp.remove();resolve()},80)}catch(e){temp.remove();reject(e)}})}
 async function downloadPass(id){const m=members.find(x=>x.id===id);if(!m)return;try{const c=document.createElement('canvas');c.width=900;c.height=560;const ctx=c.getContext('2d');ctx.fillStyle='#fbf8ef';ctx.fillRect(0,0,c.width,c.height);ctx.strokeStyle='#d4af5a';ctx.lineWidth=3;ctx.strokeRect(18,18,864,524);ctx.fillStyle='#8b6a27';ctx.font='bold 30px Arial';ctx.fillText('IRON-PASS',52,76);ctx.fillStyle='#777';ctx.font='18px Arial';ctx.fillText('ELITE CLUB MEMBERSHIP',52,108);ctx.fillStyle='#b8933f';ctx.fillRect(52,135,796,2);const photo=await loadImage(m.photo||avatarData(m.fullName));ctx.save();ctx.beginPath();ctx.roundRect(52,170,210,230,20);ctx.clip();ctx.drawImage(photo,52,170,210,230);ctx.restore();ctx.fillStyle='#1c1c1e';ctx.font='bold 34px Arial';wrapCanvasText(ctx,m.fullName,300,220,440,42);ctx.font='22px Arial';ctx.fillStyle='#777';ctx.fillText(m.id,300,282);ctx.fillStyle='#8b6a27';ctx.font='bold 20px Arial';ctx.fillText(m.category==='ITF'?(m.beltRank||'ITF TAEKWON-DO'):'GENERAL GYM',300,326);ctx.fillStyle='#777';ctx.font='17px Arial';ctx.fillText('VALID THROUGH',300,374);ctx.fillStyle='#1c1c1e';ctx.font='bold 23px Arial';ctx.fillText(fmtDate(m.membershipExpiryDate),300,406);ctx.fillStyle='#777';ctx.font='16px Arial';ctx.fillText(statusOf(m)==='EXPIRED'?'EXPIRED':statusOf(m)==='EXPIRING'?'RENEWAL SOON':'ACTIVE MEMBER',300,445);const qr=document.createElement('canvas');qr.width=170;qr.height=170;await drawQRToCanvas(m.id,qr,170);ctx.fillStyle='#fff';ctx.fillRect(670,345,190,190);ctx.drawImage(qr,680,355,170,170);const a=document.createElement('a');a.download=`iron-pass-${m.id}.png`;a.href=c.toDataURL('image/png');a.click();toast('Membership pass downloaded as PNG.','success')}catch(e){toast('Could not create PNG. Ensure the QR library loaded and retry.','error')}}
@@ -3310,17 +3438,17 @@ function setupSupabaseAuthListener() {
       console.log('Supabase Auth Event:', event);
       if (session && session.user) {
         currentAuthUser = session.user;
-        hideAuthOverlay();
+        applyUserAuthRole(session.user);
+        loadData();
+        renderDashboard();
         renderAccountSettingsUI();
+        refreshCurrent();
         if (event === 'SIGNED_IN') {
           toast('Signed in as ' + session.user.email, 'success');
           syncFromSupabase(true);
         }
       } else if (event === 'SIGNED_OUT') {
-        currentAuthUser = null;
-        sessionStorage.removeItem('ironpass_offline_unlocked');
-        renderAccountSettingsUI();
-        showAuthOverlay();
+        handleSignOut();
       }
     });
   } catch (e) {
@@ -3395,7 +3523,7 @@ function exportBackup(){const rollcallData={};try{for(let i=0;i<localStorage.len
 function importBackup(event){const file=event.target.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=()=>{try{const data=JSON.parse(reader.result);if(!data||!Array.isArray(data.members)||!Array.isArray(data.auditLog)||typeof data.settings!=='object')throw new Error('The file does not look like an IRON-PASS backup.');if(!data.members.every(m=>m&&typeof m.id==='string'&&typeof m.fullName==='string'&&m.membershipExpiryDate))throw new Error('One or more member records are invalid.');const mode=prompt('Type MERGE to combine with current records, or REPLACE to replace all local data. Cancel to stop.','MERGE');if(!mode)return;if(!['MERGE','REPLACE'].includes(mode.trim().toUpperCase()))throw new Error('Import cancelled: enter MERGE or REPLACE exactly.');if(mode.trim().toUpperCase()==='REPLACE'){if(!confirm('Replace all current members, audit records and settings with this backup?'))return;members=data.members;auditLog=data.auditLog;settings={...settings,...data.settings}}else{const map=new Map(members.map(m=>[m.id,m]));data.members.forEach(m=>map.set(m.id,m));members=[...map.values()];const ids=new Set(auditLog.map(a=>a.id));auditLog=[...data.auditLog.filter(a=>!ids.has(a.id)),...auditLog].sort((a,b)=>b.timestamp.localeCompare(a.timestamp));settings={...settings,...data.settings}}if(data.rollcallData&&typeof data.rollcallData==='object'){if(mode.trim().toUpperCase()==='REPLACE'){for(let i=localStorage.length-1;i>=0;i--){const k=localStorage.key(i);if(k&&k.startsWith('ip_rollcall_'))localStorage.removeItem(k)}}for(const [k,v] of Object.entries(data.rollcallData)){if(/^ip_rollcall_\d{4}-\d{2}-\d{2}$/.test(k)&&Array.isArray(v))writeJSON(k,v)}rollcallPresent=new Set(readJSON('ip_rollcall_'+todayISO(),[]))}persist();logAction('DATA_IMPORTED',null,`Imported backup using ${mode.trim().toUpperCase()} mode`);refreshCurrent();toast('Data imported successfully. Members, activities, check-ins and expiry dates have been restored.','success')}catch(e){toast(e.message||'Could not import that backup.','error')}finally{event.target.value=''}};reader.readAsText(file)}
 function resetDemo(){if(!confirm('Reset all current records to fresh demo data? Export a backup first if you need your current records.'))return;members=seedData();auditLog=seedAudit();rollcallPresent.clear();persist();refreshCurrent();toast('Demo data restored.','success')}
 async function clearAllData(){
-  if(!confirm('WARNING: this will permanently remove all members and audit history from this browser and cloud database. Continue?')) return;
+  if(!confirm('WARNING: this will permanently remove your gym members and audit history from this device and your cloud account. Other accounts will not be affected. Continue?')) return;
   const check=prompt('To confirm, type DELETE ALL DATA');
   if(check!=='DELETE ALL DATA') return;
 
@@ -3404,18 +3532,25 @@ async function clearAllData(){
   rollcallPresent.clear();
   persist();
 
-  if(supabaseClient){
+  if(supabaseClient && currentAuthUser){
     try{
-      await supabaseClient.from('members').delete().neq('id','');
-      await supabaseClient.from('audit_log').delete().neq('id','');
-      await supabaseClient.from('rollcall').delete().neq('date','');
-      toast('All member and audit records permanently cleared from cloud and local storage.','success');
+      const shortUid = getAuthShortUid();
+      if(hasSupabaseUserIdColumn){
+        await supabaseClient.from('members').delete().eq('user_id', currentAuthUser.id);
+        await supabaseClient.from('audit_log').delete().eq('user_id', currentAuthUser.id);
+        await supabaseClient.from('rollcall').delete().eq('user_id', currentAuthUser.id);
+      } else {
+        await supabaseClient.from('members').delete().ilike('id', '%_' + shortUid);
+        await supabaseClient.from('audit_log').delete().ilike('id', '%_' + shortUid);
+        await supabaseClient.from('rollcall').delete().ilike('date', '%_' + shortUid);
+      }
+      toast('Your gym records permanently cleared from cloud and local storage.','success');
     }catch(err){
       console.error('Cloud clear error:',err);
       toast('Cleared locally. Cloud: '+(err.message||''),'info');
     }
   } else {
-    toast('All local member records cleared.','success');
+    toast('All local records cleared for this account.','success');
   }
   refreshCurrent();
 }
