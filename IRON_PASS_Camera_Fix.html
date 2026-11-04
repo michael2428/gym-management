@@ -2835,7 +2835,7 @@ function openMemberModal(id=null,forcedCategory=''){if(!isOwner()){toast('Access
 function toggleITFFields(){const yes=$('formCategory')?.value==='ITF';$('guardianField')?.classList.toggle('hidden',!yes);$('beltField')?.classList.toggle('hidden',!yes)}
 function handlePhoto(event){const file=event.target.files?.[0];if(!file)return;if(!file.type.startsWith('image/'))return toast('Please choose an image file.','error');const reader=new FileReader();reader.onload=()=>{const img=new Image();img.onload=()=>{try{const canvas=document.createElement('canvas'),scale=Math.min(1,300/img.width);canvas.width=Math.max(1,Math.round(img.width*scale));canvas.height=Math.max(1,Math.round(img.height*scale));const ctx=canvas.getContext('2d');ctx.drawImage(img,0,0,canvas.width,canvas.height);memberFormPhoto=canvas.toDataURL('image/jpeg',.7);$('photoPreview').src=memberFormPhoto}catch(e){toast('Could not process that photo.','error')}};img.onerror=()=>toast('Could not read that image.','error');img.src=reader.result};reader.readAsDataURL(file)}
 function saveMember(event){event.preventDefault();if(!isOwner()){toast('Access Denied: Only the Gym Owner has permission to register or edit members.','error');return;}const form=new FormData(event.target),data=Object.fromEntries(form.entries());if(data.membershipExpiryDate<data.membershipStartDate)return toast('Expiry date cannot be before membership start date.','error');const old=editingId?members.find(m=>m.id===editingId || m.dbId===editingId):null;const id=old?.id||`IP-${String(Math.max(0,...members.map(m=>Number((m.id.match(/\d+$/)||[])[0]||0)))+1).padStart(4,'0')}`;const dbId=old?.dbId||getScopedMemberDbId(id);const m={...(old||{}),id,dbId,fullName:data.fullName.trim(),photo:memberFormPhoto||old?.photo||avatarData(data.fullName),category:data.category,age:Number(data.age),phone:data.phone.trim(),guardianName:data.category==='ITF'?data.guardianName.trim():'',beltRank:data.category==='ITF'?data.beltRank:'',membershipStartDate:data.membershipStartDate,membershipExpiryDate:data.membershipExpiryDate,monthlyFee:Number(data.monthlyFee),notes:data.notes.trim(),createdAt:old?.createdAt||new Date().toISOString(),lastCheckIn:old?.lastCheckIn||null};if(old){members=members.map(x=>(x.id===id || x.dbId===dbId)?m:x);logAction('MEMBER_UPDATED',m,'Member profile updated')}else{members.push(m);logAction('MEMBER_CREATED',m,`New ${m.category} member created`)}persist();dbUpsertMember(m);closeModal();refreshCurrent();toast(old?'Member details updated.':'Member created successfully.','success')}
-function refreshCurrent(){renderDashboard();if(currentView==='gym')renderCategory('GYM');if(currentView==='itf')renderCategory('ITF');if(currentView==='members')renderMembers();if(currentView==='rollcall')renderRollcall();if(currentView==='settings')renderSettings()}
+function refreshCurrent(){renderDashboard();if(currentView==='gym')renderCategory('GYM');if(currentView==='itf')renderCategory('ITF');if(currentView==='members')renderMembers();if(currentView==='audit')renderAudit();if(currentView==='rollcall')renderRollcall();if(currentView==='settings')renderSettings()}
 function deleteMember(id){if(!isOwner()){toast('Access Denied: Only the Gym Owner has permission to delete member records.','error');return;}const m=members.find(x=>x.id===id||x.dbId===id);if(!m)return;if(!confirm(`Delete ${m.fullName} (${m.id})? This cannot be undone.`))return;members=members.filter(x=>x.id!==id && x.dbId!==id);logAction('MEMBER_DELETED',m,'Member record deleted');persist();dbDeleteMember(id);refreshCurrent();toast('Member deleted.','success')}
 function viewMember(id){const m=members.find(x=>x.id===id||x.dbId===id);if(!m)return;const body=`<div class="flex flex-col sm:flex-row gap-5"><img src="${m.photo||avatarData(m.fullName)}" class="w-24 h-24 rounded-2xl object-cover border border-[#e9e5dc]" alt="${esc(m.fullName)}"><div class="flex-1"><div class="flex flex-wrap items-center gap-2"><h3 class="text-xl font-extrabold">${esc(m.fullName)}</h3>${statusBadge(m)}</div><div class="text-xs text-stone-500 mt-1">${esc(m.id)} · ${m.category==='ITF'?'ITF Taekwon-Do':'General Gym'} · Age ${m.age}</div><div class="grid grid-cols-2 gap-4 mt-5">${detail('Phone',m.phone)}${detail('Monthly fee',fmtMoney(m.monthlyFee))}${detail('Start date',fmtDate(m.membershipStartDate))}${detail('Expiry date',fmtDate(m.membershipExpiryDate))}${m.category==='ITF'?detail('Belt rank',m.beltRank||'—')+detail('Guardian',m.guardianName||'—'):''}${detail('Time remaining',daysLabel(m))}${detail('Last check-in',fmtTime(m.lastCheckIn))}</div>${m.notes?`<div class="mt-4 text-sm text-stone-600"><b>Notes:</b> ${esc(m.notes)}</div>`:''}</div></div>`;const footBtns = isOwner()
   ? `<button class="btn btn-light" onclick="closeModal()">Close</button>
@@ -2859,7 +2859,7 @@ function showDossier(id){const m=members.find(x=>x.id===id);if(!m)return;const b
 function printDossier(id){const m=members.find(x=>x.id===id);if(!m)return;const p=$('printArea');p.classList.remove('hidden');p.innerHTML=$('dossier')?.outerHTML||'';window.print();p.classList.add('hidden')}
 async function downloadDossierImage(id){return downloadPass(id)}
 function playTone(ok){try{const C=window.AudioContext||window.webkitAudioContext;if(!C)return;const c=new C(),o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.type='sine';o.frequency.setValueAtTime(ok?740:220,c.currentTime);if(ok)o.frequency.setValueAtTime(980,c.currentTime+.12);g.gain.setValueAtTime(.0001,c.currentTime);g.gain.exponentialRampToValueAtTime(.18,c.currentTime+.025);g.gain.exponentialRampToValueAtTime(.0001,c.currentTime+(ok?.3:.42));o.start();o.stop(c.currentTime+(ok?.32:.45));o.onended=()=>c.close()}catch(e){}}
-function verifyMember(id){id=String(id||'').trim();const m=members.find(x=>x.id.toLowerCase()===id.toLowerCase());if(!m){toast('Member ID not found. Check the ID or try a name search.','error');return}lastVerifiedId=m.id;const status=statusOf(m),expired=status==='EXPIRED',expiring=status==='EXPIRING',days=dateDiff(m.membershipExpiryDate);if(expired){logAction('CHECK_IN_DENIED_EXPIRED',m,`Unpaid Entry Attempt — expired on ${m.membershipExpiryDate}, ${Math.abs(days)} days overdue`);playTone(false)}else{m.lastCheckIn=new Date().toISOString();const early=new Date().getHours()<Number(settings.openingHour);logAction('CHECK_IN_GRANTED',m,`${expiring?'Renewal reminder — ':''}Check-in granted${early?' — Unsupervised Entry (before opening hour)':''}${expiring?`; membership expires in ${days} day(s)`:''}`);persist();dbUpdateMemberCheckin(m.id,m.lastCheckIn);playTone(true)}const banner=expired?'ACCESS DENIED':'ACCESS GRANTED';$('verifyContent').innerHTML=`<div class="p-5 md:p-7"><div class="flex justify-between items-start gap-3 mb-5"><div><div class="eyebrow">Entry verification</div><div class="text-xs text-stone-500 mt-1">Local record match · ${new Date().toLocaleTimeString()}</div></div><button class="btn btn-light btn-sm" onclick="closeVerification()" aria-label="Close"><i class="fa-solid fa-xmark"></i></button></div><div class="verify-status ${status.toLowerCase()}"><i class="fa-solid ${expired?'fa-ban':'fa-circle-check'} text-3xl"></i><div class="text-2xl md:text-3xl font-black tracking-tight mt-2">${banner}</div><div class="text-sm font-semibold mt-1">${expired?'Membership expired':expiring?`Membership expires in ${days} day${days===1?'':'s'}`:'Membership valid'}</div></div><div class="flex flex-col sm:flex-row items-center gap-5 py-6"><img src="${m.photo||avatarData(m.fullName)}" class="w-28 h-28 rounded-2xl object-cover border-2 ${expired?'border-red-200':expiring?'border-amber-200':'border-emerald-200'}" alt="${esc(m.fullName)} profile photo"><div class="text-center sm:text-left flex-1"><h2 id="verifyName" class="text-2xl font-extrabold">${esc(m.fullName)}</h2><div class="text-sm text-stone-500 mt-1">${esc(m.id)} · ${m.category==='ITF'?'ITF Taekwon-Do':'General Gym'}</div>${m.category==='ITF'?`<div class="text-sm font-bold text-[#8b6a27] mt-2">${esc(m.beltRank||'Rank not set')}</div>`:''}<div class="mt-3">${statusBadge(m)}</div></div></div><div class="grid grid-cols-2 gap-4 rounded-xl bg-[#faf9f6] p-4">${detail(expired?'Overdue by':'Time remaining',days<0?`${Math.abs(days)} days overdue`:days===0?'Expires today':`${days} days`)}${detail('Expiry date',fmtDate(m.membershipExpiryDate))}${detail('Monthly fee',fmtMoney(m.monthlyFee))}${detail('Phone',m.phone)}</div>${expired?`<div class="mt-4 p-3 rounded-xl bg-red-50 border border-red-100 text-sm text-red-800"><i class="fa-solid fa-triangle-exclamation mr-2"></i>Do not grant entry until the membership is renewed.</div>`:expiring?`<div class="mt-4 p-3 rounded-xl bg-amber-50 border border-amber-100 text-sm text-amber-900"><i class="fa-solid fa-bell mr-2"></i>Remind this member to renew soon.</div>`:`<div class="mt-4 p-3 rounded-xl bg-emerald-50 border border-emerald-100 text-sm text-emerald-800"><i class="fa-solid fa-check mr-2"></i>Membership is valid. Check-in has been logged.</div>`}</div><div class="modal-foot">
+function verifyMember(id){id=String(id||'').trim();const cleanId=getLocalMemberId(id);const m=members.find(x=>x.id.toLowerCase()===id.toLowerCase()||x.id.toLowerCase()===cleanId.toLowerCase()||(x.dbId&&x.dbId.toLowerCase()===id.toLowerCase()));if(!m){toast('Member ID not found. Check the ID or try a name search.','error');return}lastVerifiedId=m.id;const status=statusOf(m),expired=status==='EXPIRED',expiring=status==='EXPIRING',days=dateDiff(m.membershipExpiryDate);if(expired){logAction('CHECK_IN_DENIED_EXPIRED',m,`Unpaid Entry Attempt — expired on ${m.membershipExpiryDate}, ${Math.abs(days)} days overdue`);playTone(false)}else{m.lastCheckIn=new Date().toISOString();const early=new Date().getHours()<Number(settings.openingHour);logAction('CHECK_IN_GRANTED',m,`${expiring?'Renewal reminder — ':''}Check-in granted${early?' — Unsupervised Entry (before opening hour)':''}${expiring?`; membership expires in ${days} day(s)`:''}`);persist();dbUpdateMemberCheckin(m.id,m.lastCheckIn);playTone(true)}const banner=expired?'ACCESS DENIED':'ACCESS GRANTED';$('verifyContent').innerHTML=`<div class="p-5 md:p-7"><div class="flex justify-between items-start gap-3 mb-5"><div><div class="eyebrow">Entry verification</div><div class="text-xs text-stone-500 mt-1">Local record match · ${new Date().toLocaleTimeString()}</div></div><button class="btn btn-light btn-sm" onclick="closeVerification()" aria-label="Close"><i class="fa-solid fa-xmark"></i></button></div><div class="verify-status ${status.toLowerCase()}"><i class="fa-solid ${expired?'fa-ban':'fa-circle-check'} text-3xl"></i><div class="text-2xl md:text-3xl font-black tracking-tight mt-2">${banner}</div><div class="text-sm font-semibold mt-1">${expired?'Membership expired':expiring?`Membership expires in ${days} day${days===1?'':'s'}`:'Membership valid'}</div></div><div class="flex flex-col sm:flex-row items-center gap-5 py-6"><img src="${m.photo||avatarData(m.fullName)}" class="w-28 h-28 rounded-2xl object-cover border-2 ${expired?'border-red-200':expiring?'border-amber-200':'border-emerald-200'}" alt="${esc(m.fullName)} profile photo"><div class="text-center sm:text-left flex-1"><h2 id="verifyName" class="text-2xl font-extrabold">${esc(m.fullName)}</h2><div class="text-sm text-stone-500 mt-1">${esc(m.id)} · ${m.category==='ITF'?'ITF Taekwon-Do':'General Gym'}</div>${m.category==='ITF'?`<div class="text-sm font-bold text-[#8b6a27] mt-2">${esc(m.beltRank||'Rank not set')}</div>`:''}<div class="mt-3">${statusBadge(m)}</div></div></div><div class="grid grid-cols-2 gap-4 rounded-xl bg-[#faf9f6] p-4">${detail(expired?'Overdue by':'Time remaining',days<0?`${Math.abs(days)} days overdue`:days===0?'Expires today':`${days} days`)}${detail('Expiry date',fmtDate(m.membershipExpiryDate))}${detail('Monthly fee',fmtMoney(m.monthlyFee))}${detail('Phone',m.phone)}</div>${expired?`<div class="mt-4 p-3 rounded-xl bg-red-50 border border-red-100 text-sm text-red-800"><i class="fa-solid fa-triangle-exclamation mr-2"></i>Do not grant entry until the membership is renewed.</div>`:expiring?`<div class="mt-4 p-3 rounded-xl bg-amber-50 border border-amber-100 text-sm text-amber-900"><i class="fa-solid fa-bell mr-2"></i>Remind this member to renew soon.</div>`:`<div class="mt-4 p-3 rounded-xl bg-emerald-50 border border-emerald-100 text-sm text-emerald-800"><i class="fa-solid fa-check mr-2"></i>Membership is valid. Check-in has been logged.</div>`}</div><div class="modal-foot">
   <button class="btn btn-light" onclick="closeVerification()">Close / Next Scan</button>
   <button class="btn btn-light" onclick="viewMember('${m.id}')"><i class="fa-regular fa-eye"></i> Full Profile</button>
   ${isOwner() 
@@ -2873,8 +2873,8 @@ async function startScanner(){if(scannerRunning)return;if(!navigator.mediaDevice
 async function stopScanner(){try{if(scanner&&scannerRunning){await scanner.stop();await scanner.clear()}}catch(e){}scannerRunning=false;$('startScanBtn').disabled=false;$('stopScanBtn').disabled=true}
 function renderAudit(){const q=($('auditSearch')?.value||'').toLowerCase(),action=$('auditAction')?.value||'',from=$('auditFrom')?.value||'',to=$('auditTo')?.value||'';const list=auditLog.filter(a=>(!q||[a.memberName,a.memberId,a.details,a.action].some(v=>String(v||'').toLowerCase().includes(q)))&&(!action||a.action===action)&&(!from||a.timestamp.slice(0,10)>=from)&&(!to||a.timestamp.slice(0,10)<=to));$('auditList').innerHTML=list.length?`<div class="divide-y divide-[#f0eee8]">${list.map(a=>`<div class="p-4 md:px-5 flex items-start gap-3"><div class="w-9 h-9 rounded-xl ${a.action.includes('DENIED')?'bg-red-50 text-red-600':'bg-[#f6f2e8] text-[#9b7834]'} grid place-items-center flex-shrink-0"><i class="fa-solid ${actionIcon(a.action)}"></i></div><div class="min-w-0 flex-1"><div class="flex flex-wrap items-center gap-2"><span class="font-bold text-sm">${esc(a.memberName)}</span><span class="text-[9px] font-extrabold uppercase tracking-wider ${a.action.includes('DENIED')?'text-red-600':'text-stone-400'}">${esc(a.action.replaceAll('_',' '))}</span></div><p class="text-xs text-stone-600 mt-1">${esc(a.details||'No details')}</p><p class="text-[10px] text-stone-400 mt-2">${fmtTime(a.timestamp)} ${a.memberId?'· '+esc(a.memberId):''}</p></div></div>`).join('')}</div>`:`<div class="empty-state"><i class="fa-solid fa-clock-rotate-left block"></i><div class="font-bold text-stone-700">No activity matches these filters</div></div>`}
 function renderRollcall(){const list=members.filter(m=>m.category==='ITF'),q=($('rollcallSearch')?.value||'').toLowerCase(),filter=$('rollcallFilter')?.value||'';const todayPresent=new Set([...rollcallPresent].filter(id=>members.some(m=>m.id===id&&m.category==='ITF')));$('rollcallCount').innerHTML=`${todayPresent.size} / ${list.length} <span class="text-sm font-medium text-stone-500">present</span>`;$('rollcallProgress').style.width=`${list.length?Math.min(100,todayPresent.size/list.length*100):0}%`;const shown=list.filter(m=>(!q||[m.fullName,m.id,m.guardianName].some(v=>String(v||'').toLowerCase().includes(q)))&&(!filter||(filter==='unpaid'?statusOf(m)==='EXPIRED':filter==='present'?todayPresent.has(m.id):!todayPresent.has(m.id))));$('rollcallList').innerHTML=shown.length?shown.map(m=>{const present=todayPresent.has(m.id),expired=statusOf(m)==='EXPIRED';return `<button class="roster-row text-left ${present?'present':''}" onclick="togglePresent('${m.id}')"><span class="checkmark">${present?'<i class="fa-solid fa-check"></i>':''}</span><img src="${m.photo||avatarData(m.fullName)}" class="w-11 h-11 rounded-xl object-cover" alt=""><span class="flex-1 min-w-0"><span class="block font-bold text-sm">${esc(m.fullName)}</span><span class="block text-[10px] text-stone-500 mt-1">${esc(m.id)} · ${esc(m.beltRank||'Rank not set')}</span>${expired?'<span class="block text-[10px] text-red-600 font-extrabold mt-1"><i class="fa-solid fa-triangle-exclamation mr-1"></i>EXPIRED — fee overdue</span>':statusOf(m)==='EXPIRING'?'<span class="block text-[10px] text-amber-700 font-bold mt-1">Renewal due soon</span>':''}</span><span class="text-[10px] ${present?'text-emerald-700':'text-stone-400'} font-extrabold">${present?'PRESENT':'MARK PRESENT'}</span></button>`}).join(''):`<div class="card empty-state lg:col-span-2">No students match this filter.</div>`}
-function togglePresent(id){const m=members.find(x=>x.id===id);if(!m)return;if(rollcallPresent.has(id))rollcallPresent.delete(id);else{rollcallPresent.add(id);logAction('ROLL_CALL_MARKED',m,`Marked present for ITF class on ${todayISO()}`)}writeJSON('ip_rollcall_'+todayISO(),[...rollcallPresent]);dbSaveRollcall(todayISO(),rollcallPresent);renderRollcall()}
-function clearRollcall(){if(!confirm("Reset today's roll-call checklist? This only clears the on-screen attendance state; audit entries remain."))return;rollcallPresent.clear();writeJSON('ip_rollcall_'+todayISO(),[]);dbSaveRollcall(todayISO(),[]);renderRollcall();toast("Today's roll-call checklist reset.")}
+function togglePresent(id){const m=members.find(x=>x.id===id);if(!m)return;if(rollcallPresent.has(id))rollcallPresent.delete(id);else{rollcallPresent.add(id);logAction('ROLL_CALL_MARKED',m,`Marked present for ITF class on ${todayISO()}`)}writeJSON(getUserStorageKey('ip_rollcall_'+todayISO()),[...rollcallPresent]);dbSaveRollcall(todayISO(),rollcallPresent);renderRollcall()}
+function clearRollcall(){if(!confirm("Reset today's roll-call checklist? This only clears the on-screen attendance state; audit entries remain."))return;rollcallPresent.clear();writeJSON(getUserStorageKey('ip_rollcall_'+todayISO()),[]);dbSaveRollcall(todayISO(),[]);renderRollcall();toast("Today's roll-call checklist reset.")}
 
 function onStartDateChange(val) {
   const expiryInput = document.getElementById('formExpiryDate');
@@ -2972,13 +2972,18 @@ function handleOwnerPinSubmit(e) {
 }
 
 function switchToManager() {
-  currentUser.role = 'MANAGER';
-  currentUser.name = (currentAuthUser && currentAuthUser.user_metadata?.full_name) || 'Front Desk Staff';
+  const staffName = ($('managerNameInput')?.value || '').trim() || (currentAuthUser && currentAuthUser.user_metadata?.full_name) || 'Front Desk Staff';
+  currentUser = {
+    role: 'MANAGER',
+    name: staffName,
+    email: (currentAuthUser && currentAuthUser.email) || ''
+  };
   sessionStorage.removeItem('ironpass_owner_unlocked');
   writeJSON('ironpass_current_user', currentUser);
   applyRoleDOMClasses();
   updateUserRoleUI();
   refreshCurrent();
+  closeModal();
   toast('Switched to Front Desk Manager mode. Registration and renewals are now locked.', 'info');
 }
 
@@ -3069,12 +3074,14 @@ function renderSettingsRoleUI() {
 let currentAuthUser = null;
 let authMode = 'signin';
 let authListenerRegistered = false;
+let isSigningOut = false;
 
 function showAuthOverlay() {
   const ov = $('authOverlay');
   if (ov) {
     ov.classList.add('open');
     ov.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
     clearAuthNotice();
   }
 }
@@ -3084,6 +3091,7 @@ function hideAuthOverlay() {
   if (ov) {
     ov.classList.remove('open');
     ov.style.display = 'none';
+    document.body.style.overflow = '';
   }
 }
 
@@ -3262,6 +3270,9 @@ async function handleEmailAuth(e) {
       setAuthLoading(false);
       if (data.session && data.session.user) {
         currentAuthUser = data.session.user;
+        applyUserAuthRole(data.session.user);
+        loadData();
+        refreshCurrent();
         hideAuthOverlay();
         renderAccountSettingsUI();
         toast('Account created and signed in!', 'success');
@@ -3287,6 +3298,9 @@ async function handleEmailAuth(e) {
       setAuthLoading(false);
       if (data.session && data.session.user) {
         currentAuthUser = data.session.user;
+        applyUserAuthRole(data.session.user);
+        loadData();
+        refreshCurrent();
         hideAuthOverlay();
         renderAccountSettingsUI();
         toast('Signed in as ' + email, 'success');
@@ -3342,24 +3356,34 @@ function handleEmergencyPinUnlock() {
 }
 
 async function handleSignOut() {
-  sessionStorage.removeItem('ironpass_offline_unlocked');
-  sessionStorage.removeItem('ironpass_owner_unlocked');
-  localStorage.removeItem('ironpass_current_user');
-  currentUser = { role: 'MANAGER', name: 'Front Desk Staff', email: '' };
-  currentAuthUser = null;
-  applyRoleDOMClasses();
-  updateUserRoleUI();
+  if (isSigningOut) return;
+  isSigningOut = true;
+  try {
+    sessionStorage.removeItem('ironpass_offline_unlocked');
+    sessionStorage.removeItem('ironpass_owner_unlocked');
+    localStorage.removeItem('ironpass_current_user');
+    currentUser = { role: 'MANAGER', name: 'Front Desk Staff', email: '' };
+    currentAuthUser = null;
+    members = [];
+    auditLog = [];
+    rollcallPresent.clear();
+    applyRoleDOMClasses();
+    updateUserRoleUI();
+    refreshCurrent();
+    renderAccountSettingsUI();
+    showAuthOverlay();
 
-  if (supabaseClient) {
-    try {
-      await supabaseClient.auth.signOut();
-    } catch (e) {
-      console.warn('Sign out error:', e);
+    if (supabaseClient) {
+      try {
+        await supabaseClient.auth.signOut();
+      } catch (e) {
+        console.warn('Sign out error:', e);
+      }
     }
+    toast('Signed out successfully. Session reset.', 'info');
+  } finally {
+    isSigningOut = false;
   }
-  toast('Signed out successfully. Session reset.', 'info');
-  renderAccountSettingsUI();
-  showAuthOverlay();
 }
 
 function renderAccountSettingsUI() {
@@ -3448,7 +3472,21 @@ function setupSupabaseAuthListener() {
           syncFromSupabase(true);
         }
       } else if (event === 'SIGNED_OUT') {
-        handleSignOut();
+        if (!isSigningOut) {
+          sessionStorage.removeItem('ironpass_offline_unlocked');
+          sessionStorage.removeItem('ironpass_owner_unlocked');
+          localStorage.removeItem('ironpass_current_user');
+          currentUser = { role: 'MANAGER', name: 'Front Desk Staff', email: '' };
+          currentAuthUser = null;
+          members = [];
+          auditLog = [];
+          rollcallPresent.clear();
+          applyRoleDOMClasses();
+          updateUserRoleUI();
+          renderAccountSettingsUI();
+          refreshCurrent();
+          showAuthOverlay();
+        }
       }
     });
   } catch (e) {
@@ -3482,8 +3520,11 @@ async function checkAuthSession() {
     const { data: { session }, error } = await supabaseClient.auth.getSession();
     if (session && session.user) {
       currentAuthUser = session.user;
+      applyUserAuthRole(session.user);
+      loadData();
       hideAuthOverlay();
       renderAccountSettingsUI();
+      refreshCurrent();
       return true;
     } else if (isUnlockedOffline) {
       currentAuthUser = null;
@@ -3507,6 +3548,7 @@ async function checkAuthSession() {
 }
 
 function renderSettings(){
+  renderAccountSettingsUI();
   $('clubName').value=settings.clubName||'Woliso Gym and ITF';
   $('openingHour').innerHTML=Array.from({length:24},(_,h)=>`<option value="${h}" ${Number(settings.openingHour)===h?'selected':''}>${String(h).padStart(2,'0')}:00</option>`).join('');
   $('currency').value=settings.currency||'ETB';if($('settingsOwnerPin'))$('settingsOwnerPin').value=settings.ownerPin||'1234';renderSettingsRoleUI();
@@ -3674,25 +3716,23 @@ function updateManagerName(name) {
   toast('Manager name updated.', 'success');
 }
 
-function switchToManager() {
-  const name = ($('managerNameInput')?.value || '').trim() || 'Front Desk Manager';
-  currentUser = { role: 'MANAGER', name };
-  writeJSON('ironpass_current_user', currentUser);
-  updateUserRoleUI();
-  closeModal();
-  toast('Switched to Front Desk Manager mode.', 'info');
-}
-
 function handleOwnerLogin(e) {
   if (e) e.preventDefault();
   const enteredPin = ($('ownerPinInput')?.value || '').trim();
   const correctPin = String(settings.ownerPin || '1234');
   if (enteredPin === correctPin) {
-    currentUser = { role: 'OWNER', name: 'Gym Owner' };
+    currentUser = {
+      role: 'OWNER',
+      name: 'Gym Owner',
+      email: (currentAuthUser && currentAuthUser.email) || ''
+    };
+    sessionStorage.setItem('ironpass_owner_unlocked', 'true');
     writeJSON('ironpass_current_user', currentUser);
+    applyRoleDOMClasses();
     updateUserRoleUI();
     closeModal();
-    toast('Owner authenticated. Live door oversight active.', 'success');
+    refreshCurrent();
+    toast('👑 Owner authenticated. Master oversight active.', 'success');
     setTimeout(() => { openOwnerPortal(); }, 150);
   } else {
     toast('Incorrect Owner PIN. Default PIN is 1234.', 'error');
