@@ -1,10 +1,12 @@
-const CACHE_NAME = 'woliso-gym-v2';
+const CACHE_NAME = 'woliso-gym-v3';
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
   '/IRON_PASS_Camera_Fix.html',
   '/manifest.json',
   '/icon.svg',
+  '/icon-192.png',
+  '/icon-512.png',
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
   'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js'
 ];
