@@ -1,8 +1,10 @@
-const CACHE_NAME = 'woliso-gym-v1';
+const CACHE_NAME = 'woliso-gym-v2';
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
   '/IRON_PASS_Camera_Fix.html',
+  '/manifest.json',
+  '/icon.svg',
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
   'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js'
 ];
@@ -51,7 +53,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Cache-first for scripts, styles, images
+  // Cache-first for scripts, styles, images, manifest
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {

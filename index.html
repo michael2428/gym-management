@@ -2,8 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#1c1c1e">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="application-name" content="WOLISO GYM & ITF">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" type="image/svg+xml" href="/icon.svg">
+<link rel="apple-touch-icon" href="/icon.svg">
 <title>WOLISO GYM & ITF | Elite Gym & ITF Taekwon-Do</title>
 <!-- Supabase Client Library (official CDN bundle) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -14,6 +21,19 @@
 
 
 <style>
+/* Android Safe-Area Insets for notches & gesture bars */
+:root {
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+}
+body {
+  padding-top: var(--sat);
+  padding-bottom: var(--sab);
+  padding-left: var(--sal);
+  padding-right: var(--sar);
+}
 /* Offline-bundled Tailwind utilities; generated from this document. */
 /*! tailwindcss v4.1.10 | MIT License | https://tailwindcss.com */
 @layer properties;
@@ -1485,36 +1505,34 @@ body.role-manager .role-banner-manager {
 <header class="bg-white border-b border-[#e9e5dc] sticky top-0 z-30">
   <div class="max-w-[1500px] mx-auto px-4 md:px-7">
     <div class="py-3 flex items-center justify-between gap-3">
-      <!-- Brand & Logo matching reference image -->
-      <div class="flex items-center gap-3 min-w-0">
-        <div class="w-11 h-11 md:w-12 md:h-12 rounded-2xl bg-gradient-to-br from-[#B8933F] to-[#7A5C20] flex items-center justify-center text-white shadow-md flex-shrink-0">
-          <i class="fa-solid fa-shield-halved text-xl md:text-2xl"></i>
+      <!-- Brand & Logo -->
+      <div class="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 sm:flex-initial pr-1">
+        <div class="w-10 h-10 sm:w-11 sm:h-11 md:w-12 md:h-12 rounded-2xl bg-gradient-to-br from-[#B8933F] to-[#7A5C20] flex items-center justify-center text-white shadow-md flex-shrink-0">
+          <i class="fa-solid fa-shield-halved text-lg sm:text-xl md:text-2xl"></i>
         </div>
         <div class="min-w-0">
-          <h1 class="font-black text-xl md:text-2xl tracking-tight leading-none text-[#1C1C1E]">WOLISO GYM &amp; ITF</h1>
-          <span class="text-[9px] md:text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#99762E] block mt-1">ELITE GYM &amp; ITF TAEKWON-DO</span>
+          <h1 class="font-black text-sm sm:text-lg md:text-2xl tracking-tight leading-none text-[#1C1C1E] truncate">WOLISO GYM &amp; ITF</h1>
+          <span class="text-[8px] sm:text-[9px] md:text-[10px] font-extrabold uppercase tracking-[0.1em] sm:tracking-[0.14em] text-[#99762E] block mt-0.5 truncate">ELITE GYM &amp; ITF TAEKWON-DO</span>
         </div>
       </div>
-      <!-- Right Side: Live Sync Status, Staff Role Pill, and Scan Pass Button -->
-      <div class="flex items-center gap-1.5 md:gap-2 flex-shrink-0">
+      <!-- Right Side Controls: Responsive, Clean & Non-Overlapping -->
+      <div class="flex items-center gap-1 sm:gap-2 flex-shrink-0 ml-auto">
         <!-- Live Cloud Sync Status Pill -->
-        <button id="headerSyncBtn" type="button" onclick="triggerManualSync()" class="cursor-pointer transition active:scale-95" title="Cloud synchronization status (click to sync)">
-          <span id="headerSyncBadge" class="inline-flex items-center gap-1.5 px-2 py-1 md:px-3 md:py-2 rounded-xl text-[11px] md:text-xs font-bold border border-[#e9e5dc] bg-[#faf8f0] text-stone-700">
+        <button id="headerSyncBtn" type="button" onclick="triggerManualSync()" class="cursor-pointer transition active:scale-95 flex-shrink-0" title="Cloud synchronization status (click to sync)">
+          <span id="headerSyncBadge" class="inline-flex items-center justify-center gap-1 px-2 py-1.5 sm:px-2.5 sm:py-1.5 rounded-xl text-[11px] font-bold border border-emerald-200 bg-emerald-50 text-emerald-800 shadow-2xs">
             <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span class="hidden sm:inline">Cloud Synced</span>
+            <span class="hidden md:inline">Synced</span>
           </span>
         </button>
-        <!-- Staff & Owner Role Pill -->
-        <button id="userRoleBadge" type="button" onclick="handleRoleBadgeClick()" class="cursor-pointer transition active:scale-95" title="Click to switch between Owner and Manager mode">
-          <span class="flex items-center gap-1.5 px-2 py-1 md:px-3 md:py-2 rounded-xl text-[11px] md:text-xs font-bold border border-[#e9e5dc] bg-[#faf8f0] text-stone-700">
-            <i id="userRoleIcon" class="fa-solid fa-user-tie text-[#b8933f] text-xs"></i>
-            <span id="userRoleLabel">Manager</span>
-          </span>
+        <!-- Staff & Owner Role Pill (Single border, no nested wrappers) -->
+        <button id="userRoleBadge" type="button" onclick="handleRoleBadgeClick()" class="cursor-pointer transition active:scale-95 flex-shrink-0 flex items-center gap-1 px-2 py-1.5 sm:px-2.5 sm:py-1.5 rounded-xl text-[11px] font-bold border border-[#e9e5dc] bg-[#faf8f0] text-stone-700 shadow-2xs hover:bg-[#f2ead7]" title="Click to switch role / view oversight">
+          <i id="userRoleIcon" class="fa-solid fa-user-tie text-[#b8933f] text-xs"></i>
+          <span id="userRoleLabel" class="truncate max-w-[65px] sm:max-w-[120px]">Staff</span>
         </button>
         <!-- Scan Pass Button -->
-        <button onclick="navigate('scanner')" class="bg-[#1C1C1E] text-white px-3 py-1.5 md:px-5 md:py-2.5 rounded-full text-xs md:text-sm font-bold flex items-center gap-1.5 md:gap-2 shadow-sm active:scale-95 transition-transform flex-shrink-0">
-          <i class="fa-solid fa-qrcode text-[#D4AF37] text-sm md:text-base"></i>
-          <span>Scan Pass</span>
+        <button onclick="navigate('scanner')" class="bg-[#1C1C1E] text-white px-3 py-1.5 sm:px-4 sm:py-2 md:px-5 md:py-2.5 rounded-full text-xs sm:text-sm font-bold flex items-center gap-1 sm:gap-2 shadow-sm active:scale-95 transition-transform flex-shrink-0">
+          <i class="fa-solid fa-qrcode text-[#D4AF37] text-xs sm:text-sm"></i>
+          <span class="whitespace-nowrap">Scan Pass</span>
         </button>
       </div>
     </div>
@@ -2189,27 +2207,27 @@ function updateNetworkSyncBadge(overrideStatus) {
   const isOnline = navigator.onLine;
 
   if (overrideStatus === 'syncing' || supabaseStatus === 'syncing') {
-    badge.className = 'inline-flex items-center gap-1.5 px-2 py-1 md:px-3 md:py-2 rounded-xl text-[11px] md:text-xs font-bold border border-[#e8dfc9] bg-[#faf7ee] text-[#8e6e2b] shadow-2xs';
-    badge.innerHTML = '<i class="fa-solid fa-arrows-rotate animate-spin text-[10px] text-[#b8933f]"></i><span class="hidden sm:inline">Syncing...</span><span class="sm:hidden">Sync</span>';
+    badge.className = 'inline-flex items-center justify-center gap-1 px-2 py-1.5 sm:px-2.5 sm:py-1.5 rounded-xl text-[11px] font-bold border border-[#e8dfc9] bg-[#faf7ee] text-[#8e6e2b] shadow-2xs';
+    badge.innerHTML = '<i class="fa-solid fa-arrows-rotate animate-spin text-[10px] text-[#b8933f]"></i><span class="hidden md:inline">Syncing...</span>';
     return;
   }
 
   if (!isOnline || overrideStatus === 'offline' || supabaseStatus === 'disconnected') {
-    badge.className = 'inline-flex items-center gap-1.5 px-2 py-1 md:px-3 md:py-2 rounded-xl text-[11px] md:text-xs font-bold border border-amber-200 bg-amber-50 text-amber-800 shadow-2xs';
-    badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-500"></span><span class="hidden sm:inline">Offline (Local)</span><span class="sm:hidden">Offline</span>${queueCount ? `<span class="ml-0.5 px-1.5 py-0.2 bg-amber-200 text-amber-900 rounded-full text-[10px]">${queueCount}</span>` : ''}`;
+    badge.className = 'inline-flex items-center justify-center gap-1 px-2 py-1.5 sm:px-2.5 sm:py-1.5 rounded-xl text-[11px] font-bold border border-amber-200 bg-amber-50 text-amber-800 shadow-2xs';
+    badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-500"></span><span class="hidden md:inline">Offline</span>${queueCount ? `<span class="ml-0.5 px-1.5 py-0.2 bg-amber-200 text-amber-900 rounded-full text-[10px] font-mono">${queueCount}</span>` : ''}`;
     badge.title = 'Offline local storage mode. All actions work and will automatically sync when internet reconnects.';
     return;
   }
 
   if (queueCount > 0) {
-    badge.className = 'inline-flex items-center gap-1.5 px-2 py-1 md:px-3 md:py-2 rounded-xl text-[11px] md:text-xs font-bold border border-amber-300 bg-amber-100 text-amber-900 shadow-2xs';
-    badge.innerHTML = `<i class="fa-solid fa-cloud-arrow-up text-[10px]"></i><span>${queueCount} Pending Sync</span>`;
+    badge.className = 'inline-flex items-center justify-center gap-1 px-2 py-1.5 sm:px-2.5 sm:py-1.5 rounded-xl text-[11px] font-bold border border-amber-300 bg-amber-100 text-amber-900 shadow-2xs';
+    badge.innerHTML = `<i class="fa-solid fa-cloud-arrow-up text-[10px] text-amber-700"></i><span class="text-[10px] font-mono bg-amber-200 px-1 rounded">${queueCount}</span><span class="hidden md:inline">Pending</span>`;
     badge.title = `${queueCount} offline change(s) ready to sync. Click to upload.`;
     return;
   }
 
-  badge.className = 'inline-flex items-center gap-1.5 px-2 py-1 md:px-3 md:py-2 rounded-xl text-[11px] md:text-xs font-bold border border-emerald-200 bg-emerald-50 text-emerald-800 shadow-2xs';
-  badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span><span class="hidden sm:inline">Cloud Synced</span><span class="sm:hidden">Synced</span>';
+  badge.className = 'inline-flex items-center justify-center gap-1 px-2 py-1.5 sm:px-2.5 sm:py-1.5 rounded-xl text-[11px] font-bold border border-emerald-200 bg-emerald-50 text-emerald-800 shadow-2xs';
+  badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span><span class="hidden md:inline">Synced</span>';
   badge.title = 'Connected and synchronized with Supabase PostgreSQL cloud.';
 }
 
@@ -3148,7 +3166,7 @@ function exportMembersCSV(){
   toast('Members roster exported to CSV (Excel format).', 'success');
 }
 let searchTimer;function debouncedRenderMembers(){clearTimeout(searchTimer);searchTimer=setTimeout(()=>{memberPage=1;renderMembers()},180)}
-function openModal(title,body,foot=''){ $('modalTitle').textContent=title;$('modalBody').innerHTML=body;$('modalFoot').innerHTML=foot;$('modalOverlay').classList.add('open');document.body.style.overflow='hidden';setTimeout(()=> $('modalBody').querySelector('input,select,textarea,button')?.focus(),60)}
+function openModal(title,body,foot=''){ pushModalHistoryState(); $('modalTitle').textContent=title;$('modalBody').innerHTML=body;$('modalFoot').innerHTML=foot;$('modalOverlay').classList.add('open');document.body.style.overflow='hidden';setTimeout(()=> $('modalBody').querySelector('input,select,textarea,button')?.focus(),60)}
 function closeModal(){$('modalOverlay').classList.remove('open');document.body.style.overflow='';editingId=null;memberFormPhoto=''}
 function openMemberModal(id=null,forcedCategory=''){if(!isOwner()){toast('Access Denied: Only the Gym Owner has permission to register or edit members.','error');return;}const m=id?members.find(x=>x.id===id):null;if(id&&!m)return;editingId=id;memberFormPhoto=m?.photo||'';const cat=m?.category||forcedCategory||'GYM';const form=`<form id="memberForm" class="space-y-4" onsubmit="saveMember(event)"><div class="flex items-center gap-4 p-3 rounded-xl bg-[#faf8f2]"><img id="photoPreview" class="w-16 h-16 rounded-xl object-cover border border-[#e7dfcc]" src="${m?.photo||avatarData(m?.fullName||'New Member')}" alt="Member photo preview"><div class="flex-1"><div class="font-bold text-sm">Member photo</div><p class="text-xs text-stone-500 mt-1">Optional · automatically resized and compressed.</p><label class="btn btn-light btn-sm mt-2 cursor-pointer"><i class="fa-solid fa-camera"></i> Upload photo<input id="memberPhoto" type="file" accept="image/*" class="hidden" onchange="handlePhoto(event)"></label></div></div><div class="grid grid-cols-1 sm:grid-cols-2 gap-4"><div><label class="field-label">Full name *</label><input name="fullName" class="field" required maxlength="100" value="${esc(m?.fullName||'')}"></div><div><label class="field-label">Category *</label><select name="category" id="formCategory" class="field" onchange="toggleITFFields()" required><option value="GYM" ${cat==='GYM'?'selected':''}>General Gym</option><option value="ITF" ${cat==='ITF'?'selected':''}>ITF Taekwon-Do</option></select></div><div><label class="field-label">Age *</label><input name="age" type="number" min="1" max="120" class="field" required value="${m?.age??''}"></div><div><label class="field-label">Phone *</label><input name="phone" class="field" required maxlength="30" value="${esc(m?.phone||'')}"></div><div id="guardianField" class="${cat==='ITF'?'':'hidden'}"><label class="field-label">Guardian name</label><input name="guardianName" class="field" value="${esc(m?.guardianName||'')}"></div><div id="beltField" class="${cat==='ITF'?'':'hidden'}"><label class="field-label">Belt rank</label><select name="beltRank" class="field">${BELTS.map(b=>`<option ${m?.beltRank===b?'selected':''}>${b}</option>`).join('')}</select></div><div>
   <label class="field-label">Membership start *</label>
@@ -3200,7 +3218,7 @@ function verifyMember(id){id=String(id||'').trim();const cleanId=getLocalMemberI
     ? `<button class="btn btn-gold" onclick="closeVerification();openRenewModal('${m.id}')"><i class="fa-solid fa-arrows-rotate"></i> Renew Membership</button>`
     : (expired ? `<div class="inline-flex items-center text-xs font-bold text-red-600 bg-red-50 border border-red-200 px-3 py-1.5 rounded-lg"><i class="fa-solid fa-lock mr-1.5"></i> Entry Blocked — Renewal is Owner Only</div>` : '')
   }
-</div>`;$('verifyOverlay').classList.add('open');document.body.style.overflow='hidden';refreshCurrent()}
+</div>`;pushModalHistoryState();$('verifyOverlay').classList.add('open');document.body.style.overflow='hidden';refreshCurrent()}
 function closeVerification(){$('verifyOverlay').classList.remove('open');document.body.style.overflow='';$('manualMember').value='';$('manualMember').focus()}
 function manualLookup(){const q=$('manualMember').value.trim().toLowerCase();if(!q)return toast('Enter a member ID, name or phone.','error');const exact=members.find(m=>m.id.toLowerCase()===q);if(exact)return verifyMember(exact.id);const matches=members.filter(m=>m.fullName.toLowerCase().includes(q)||m.phone.toLowerCase().includes(q));if(matches.length===1)return verifyMember(matches[0].id);if(matches.length>1){openModal('Choose a member',`<p class="text-sm text-stone-500 mb-3">More than one member matches. Select the correct person.</p><div class="space-y-2">${matches.slice(0,15).map(m=>`<button class="w-full text-left flex items-center gap-3 p-3 border border-[#eeeae1] rounded-xl hover:bg-[#faf8f2]" onclick="closeModal();verifyMember('${m.id}')"><img src="${m.photo||avatarData(m.fullName)}" class="w-10 h-10 rounded-lg object-cover" alt=""><div><div class="font-bold text-sm">${esc(m.fullName)}</div><div class="text-xs text-stone-500">${esc(m.id)} · ${esc(m.phone)}</div></div><span class="ml-auto">${statusBadge(m)}</span></button>`).join('')}</div>`,`<button class="btn btn-light" onclick="closeModal()">Cancel</button>`);return}toast('No matching member found.','error')}
 async function startScanner(){if(scannerRunning)return;if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){toast('Camera access is unavailable. Open IRON-PASS using HTTPS or http://localhost.', 'error');return}if(!window.Html5Qrcode){toast('Camera scanner code is unavailable. Use manual lookup.', 'error');return}try{scanner=new Html5Qrcode('qr-reader');$('startScanBtn').disabled=true;$('stopScanBtn').disabled=false;await scanner.start({facingMode:'environment'},{fps:10,qrbox:{width:230,height:230}},decoded=>{if(decoded){stopScanner();verifyMember(decoded.trim())}},()=>{});scannerRunning=true;toast('Camera scanner started.','success')}catch(e){scannerRunning=false;$('startScanBtn').disabled=false;$('stopScanBtn').disabled=true;let msg=(e&&e.message)||String(e||'Unknown camera error');if(e&&e.name==='NotAllowedError')msg='Camera permission was denied. Allow camera access for this site in Chrome Site Settings.';else if(e&&e.name==='NotFoundError')msg='No camera was found. Connect or enable a camera and try again.';else if(e&&e.name==='NotReadableError')msg='The camera is busy or unavailable. Close apps using the camera and try again.';else if(e&&e.name==='OverconstrainedError')msg='The requested camera mode is unavailable. Try another camera.';toast('Camera error: '+msg,'error');console.error('IRON-PASS camera start failed:',e)}}
@@ -3947,6 +3965,35 @@ async function clearAllData(){
 }
 
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){if($('verifyOverlay').classList.contains('open'))closeVerification();else if($('modalOverlay').classList.contains('open'))closeModal()}});
+
+// Android Hardware Back Button Integration
+let modalHistoryPushed = false;
+function pushModalHistoryState() {
+  if (!modalHistoryPushed) {
+    history.pushState({ ironpass_modal_open: true }, '');
+    modalHistoryPushed = true;
+  }
+}
+function clearModalHistoryState() {
+  modalHistoryPushed = false;
+}
+window.addEventListener('popstate', () => {
+  modalHistoryPushed = false;
+  const verifyOv = $('verifyOverlay');
+  if (verifyOv && verifyOv.classList.contains('open')) {
+    closeVerification();
+    return;
+  }
+  const modalOv = $('modalOverlay');
+  if (modalOv && modalOv.classList.contains('open')) {
+    closeModal();
+    return;
+  }
+  if (currentView === 'scanner') {
+    navigate('dashboard');
+    return;
+  }
+});
 window.addEventListener('beforeunload',()=>{if(scannerRunning&&scanner){scanner.stop().catch(()=>{})}});
 
 // --- ROLE MANAGEMENT & OWNER LIVE OVERSIGHT ---
@@ -3962,15 +4009,17 @@ function updateUserRoleUI() {
   if (!badge || !label || !icon) return;
 
   if (currentUser.role === 'OWNER') {
-    badge.className = 'flex items-center gap-1.5 px-2.5 py-1.5 md:px-3 md:py-2 rounded-xl text-xs font-bold border border-[#b8933f] bg-[#fdfaf3] text-[#785b20] hover:bg-[#f6ebd0] active:scale-95 transition shadow-xs flex-shrink-0';
+    badge.className = 'cursor-pointer transition active:scale-95 flex-shrink-0 flex items-center gap-1 px-2 py-1.5 sm:px-2.5 sm:py-1.5 rounded-xl text-[11px] font-bold border border-[#b8933f] bg-[#fdfaf3] text-[#785b20] hover:bg-[#f6ebd0] shadow-2xs';
     icon.className = 'fa-solid fa-crown text-[#b8933f] text-xs';
-    label.innerHTML = '<span class="inline-flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span><span>Owner</span></span>';
+    label.innerHTML = '<span class="inline-flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span><span>Owner</span></span>';
     badge.title = 'Gym Owner Mode (Click to open Live Door & Activity Monitor)';
   } else {
-    badge.className = 'flex items-center gap-1.5 px-2.5 py-1.5 md:px-3 md:py-2 rounded-xl text-xs font-bold border border-[#e9e5dc] bg-[#faf8f0] text-stone-700 hover:bg-[#f2ead7] active:scale-95 transition shadow-xs flex-shrink-0';
+    badge.className = 'cursor-pointer transition active:scale-95 flex-shrink-0 flex items-center gap-1 px-2 py-1.5 sm:px-2.5 sm:py-1.5 rounded-xl text-[11px] font-bold border border-[#e9e5dc] bg-[#faf8f0] text-stone-700 hover:bg-[#f2ead7] shadow-2xs';
     icon.className = 'fa-solid fa-user-tie text-[#b8933f] text-xs';
-    label.textContent = currentUser.name || 'Manager';
-    badge.title = 'Front Desk Manager Mode (Click to change role)';
+    const fullName = (currentUser.name || 'Staff').trim();
+    const shortName = fullName.split(' ')[0] || 'Staff';
+    label.innerHTML = `<span class="sm:hidden truncate max-w-[65px]">${esc(shortName)}</span><span class="hidden sm:inline truncate max-w-[120px]">${esc(fullName)}</span>`;
+    badge.title = 'Front Desk Staff Mode (Click to switch to Owner)';
   }
 }
 

@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#D4AF37"/>
+      <stop offset="50%" stop-color="#B8933F"/>
+      <stop offset="100%" stop-color="#7A5C20"/>
+    </linearGradient>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2C2C2E"/>
+      <stop offset="100%" stop-color="#1C1C1E"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)"/>
+  <!-- Gold Shield -->
+  <path d="M256 70 C340 70 410 95 410 95 C410 245 355 365 256 442 C157 365 102 245 102 95 C102 95 172 70 256 70 Z" fill="url(#goldGrad)" stroke="#FBF8EF" stroke-width="8" stroke-linejoin="round"/>
+  <!-- Inner Shield Contrast Half -->
+  <path d="M256 78 C256 78 256 430 256 430 C345 358 395 245 395 102 C395 102 335 78 256 78 Z" fill="#99762E" opacity="0.4"/>
+  <!-- Dumbbell & Martial Arts Symbol -->
+  <g fill="#1C1C1E" transform="translate(0, 10)">
+    <!-- Dumbbell Bar -->
+    <rect x="200" y="246" width="112" height="20" rx="6" fill="#FFFFFF"/>
+    <!-- Dumbbell Plates -->
+    <rect x="180" y="226" width="20" height="60" rx="6" fill="#FBF8EF"/>
+    <rect x="160" y="236" width="16" height="40" rx="4" fill="#FBF8EF"/>
+    <rect x="312" y="226" width="20" height="60" rx="6" fill="#FBF8EF"/>
+    <rect x="336" y="236" width="16" height="40" rx="4" fill="#FBF8EF"/>
+    <!-- Star Emblem on top -->
+    <polygon points="256,150 268,186 306,186 275,208 287,244 256,222 225,244 237,208 206,186 244,186" fill="#FFFFFF"/>
+    <!-- Text / Arc -->
+    <text x="256" y="340" font-family="Arial, sans-serif" font-size="34" font-weight="900" fill="#FFFFFF" text-anchor="middle" letter-spacing="4">WOLISO</text>
+    <text x="256" y="375" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="#D4AF37" text-anchor="middle" letter-spacing="3">GYM &amp; ITF</text>
+  </g>
+</svg>

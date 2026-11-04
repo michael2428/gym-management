@@ -1,0 +1,25 @@
+{
+  "name": "WOLISO GYM & ITF",
+  "short_name": "Woliso Gym",
+  "description": "Elite Gym & ITF Taekwon-Do Management, Member Check-in, and Realtime Cloud Operations",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#1c1c1e",
+  "theme_color": "#1c1c1e",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
