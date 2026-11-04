@@ -1924,11 +1924,15 @@ body.role-manager .role-banner-manager {
           <span>Front Desk Emergency PIN Unlock</span>
         </button>
 
-        <div id="offlineEmergencyBox" style="display:none;margin-top:10px;padding:12px;background:#faf8f3;border:1px solid #e8dfc9;border-radius:12px;">
-          <p style="font-size:11px;color:#71717a;margin:0 0 8px 0;">Offline or no internet? Unlock front desk with gym PIN (Default: <b>1234</b>):</p>
+        <div id="offlineEmergencyBox" style="display:block;margin-top:14px;padding:14px;background:#fdfcf8;border:1.5px solid #d4af37;border-radius:14px;box-shadow:0 2px 10px rgba(184,147,63,0.15);text-align:center;">
+          <div style="display:flex;align-items:center;justify-content:center;gap:6px;font-size:12px;font-weight:800;color:#99762E;text-transform:uppercase;letter-spacing:0.04em;">
+            <i class="fa-solid fa-crown text-[#b8933f]"></i>
+            <span>Instant Owner Master Access</span>
+          </div>
+          <p style="font-size:11px;color:#71717a;margin:4px 0 8px 0;">Unlock full app permanently with Master PIN (Default: <b>1234</b>):</p>
           <div style="display:flex;align-items:center;justify-content:center;gap:8px;">
-            <input id="emergencyPinInput" type="password" maxlength="6" class="field" style="width:90px;text-align:center;font-weight:800;letter-spacing:0.15em;font-size:13px;" placeholder="1234">
-            <button type="button" onclick="handleEmergencyPinUnlock()" class="btn btn-dark btn-sm" style="padding:8px 14px;font-size:12px;">Unlock</button>
+            <input id="emergencyPinInput" type="password" maxlength="6" class="field" style="width:100px;text-align:center;font-weight:900;letter-spacing:0.2em;font-size:14px;padding:7px;border-color:#d4af37;" placeholder="1234" value="1234">
+            <button type="button" onclick="handleEmergencyPinUnlock()" class="btn btn-gold btn-sm" style="padding:8px 16px;font-size:12px;font-weight:800;">Unlock App</button>
           </div>
         </div>
       </div>
@@ -3742,10 +3746,15 @@ function handleEmergencyPinUnlock() {
   const entered = ($('emergencyPinInput')?.value || '').trim();
   const correct = String(settings.ownerPin || '1234');
   if (entered === correct) {
+    localStorage.setItem('ironpass_offline_unlocked', 'true');
     sessionStorage.setItem('ironpass_offline_unlocked', 'true');
+    currentUserRole = 'owner';
+    localStorage.setItem('ironpass_active_role', 'owner');
+    applyRoleDOMClasses();
+    updateUserRoleUI();
     hideAuthOverlay();
     renderAccountSettingsUI();
-    toast('Front desk unlocked in offline mode.', 'info');
+    toast('Gym Master Access unlocked permanently on this device!', 'success');
   } else {
     showAuthNotice('Incorrect PIN. Default is 1234.', 'error');
     if ($('emergencyPinInput')) {
@@ -3759,6 +3768,7 @@ async function handleSignOut() {
   if (isSigningOut) return;
   isSigningOut = true;
   try {
+    localStorage.removeItem('ironpass_offline_unlocked');
     sessionStorage.removeItem('ironpass_offline_unlocked');
     sessionStorage.removeItem('ironpass_owner_unlocked');
     localStorage.removeItem('ironpass_current_user');
@@ -3896,15 +3906,32 @@ function setupSupabaseAuthListener() {
 }
 
 async function checkAuthSession() {
-  const isUnlockedOffline = sessionStorage.getItem('ironpass_offline_unlocked') === 'true';
+  const isUnlockedOffline = localStorage.getItem('ironpass_offline_unlocked') === 'true' || sessionStorage.getItem('ironpass_offline_unlocked') === 'true';
 
-  // Clean URL hash if returning from OAuth
+  // Clean URL hash if returning from OAuth & Auto-bounce to app if in external browser
   if (window.location.hash && window.location.hash.includes('access_token')) {
+    const hash = window.location.hash;
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+
+    if (isMobile && !isStandalone) {
+      setTimeout(() => {
+        try {
+          window.location.href = 'intent://gym-management-one-beige.vercel.app/' + hash + '#Intent;scheme=https;package=app.vercel.gym_management_one_beige.twa;end';
+        } catch (e) {}
+      }, 300);
+      setTimeout(() => {
+        try {
+          window.location.href = 'com.wolisogym.app://login' + hash;
+        } catch (e) {}
+      }, 1000);
+    }
+
     setTimeout(() => {
       try {
         window.history.replaceState(null, '', window.location.pathname);
       } catch (e) {}
-    }, 1000);
+    }, 2000);
   }
 
   // If offline or supabaseClient failed to initialize, check if we have cached auth or offline PIN
