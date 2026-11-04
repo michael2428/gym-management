@@ -1502,6 +1502,46 @@ body.role-manager .role-banner-manager {
 </style>
 </head>
 <body>
+<!-- PROFESSIONAL 3-SECOND OPENING SPLASH SCREEN -->
+<div id="appSplashScreen" onclick="dismissSplashScreen()" style="position:fixed;inset:0;z-index:999999;background:radial-gradient(circle at 50% 38%, #26221a 0%, #131215 60%, #0a0a0c 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;user-select:none;-webkit-user-select:none;transition:opacity 0.5s cubic-bezier(0.4,0,0.2,1), transform 0.5s cubic-bezier(0.4,0,0.2,1);cursor:pointer;" title="Tap anywhere to skip">
+  <div style="display:flex;flex-direction:column;align-items:center;max-width:380px;width:100%;">
+    <!-- Glowing Brand Icon -->
+    <div style="position:relative;margin-bottom:22px;">
+      <div style="position:absolute;inset:-12px;background:radial-gradient(circle, rgba(212,175,55,0.4) 0%, rgba(212,175,55,0) 70%);border-radius:50%;filter:blur(8px);animation:splashGlowPulse 2s ease-in-out infinite;"></div>
+      <div style="position:relative;width:86px;height:86px;border-radius:26px;background:linear-gradient(135deg, #e5c365 0%, #b8933f 45%, #7a5c20 100%);box-shadow:0 12px 32px rgba(184,147,63,0.35), inset 0 1px 1px rgba(255,255,255,0.4);display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,0.2);">
+        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3));">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          <path d="M12 22V2" stroke-dasharray="2 2" stroke-width="1.2" opacity="0.6"/>
+        </svg>
+      </div>
+    </div>
+    <!-- Brand Title -->
+    <h1 style="font-size:27px;font-weight:900;letter-spacing:-0.03em;color:#ffffff;margin:0;line-height:1.15;text-shadow:0 2px 12px rgba(0,0,0,0.5);">WOLISO GYM &amp; ITF</h1>
+    <p style="font-size:10px;font-weight:800;letter-spacing:0.22em;text-transform:uppercase;color:#d4af37;margin:6px 0 0 0;">ELITE GYM &amp; ITF TAEKWON-DO</p>
+    <div style="display:inline-flex;align-items:center;gap:6px;background:rgba(212,175,55,0.1);border:1px solid rgba(212,175,55,0.25);border-radius:9999px;padding:4px 12px;margin-top:14px;">
+      <span style="width:6px;height:6px;border-radius:50%;background:#d4af37;display:inline-block;box-shadow:0 0 8px #d4af37;"></span>
+      <span style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:#f3e8c8;text-transform:uppercase;">Pass Management &amp; Access Control</span>
+    </div>
+
+    <!-- 3-Second Loading Bar -->
+    <div style="margin-top:40px;width:190px;">
+      <div style="width:100%;height:4px;background:rgba(255,255,255,0.1);border-radius:9999px;overflow:hidden;position:relative;">
+        <div id="splashProgressBar" style="width:0%;height:100%;background:linear-gradient(90deg, #b8933f 0%, #fde68a 50%, #d4af37 100%);border-radius:9999px;box-shadow:0 0 10px rgba(212,175,55,0.6);transition:width 2.8s cubic-bezier(0.1, 0.5, 0.2, 1);"></div>
+      </div>
+      <div id="splashStatusText" style="font-size:11px;color:#a1a1aa;margin-top:10px;font-weight:500;min-height:16px;">Starting system...</div>
+    </div>
+  </div>
+  <!-- Subtle Footer -->
+  <div style="position:absolute;bottom:24px;font-size:10px;color:rgba(255,255,255,0.3);letter-spacing:0.06em;font-weight:600;">
+    WOLISO GYM PORTAL • V3.0
+  </div>
+</div>
+<style>
+@keyframes splashGlowPulse {
+  0%, 100% { opacity: 0.5; transform: scale(0.95); }
+  50% { opacity: 0.9; transform: scale(1.08); }
+}
+</style>
 <div class="min-h-screen">
 <header class="bg-white border-b border-[#e9e5dc] sticky top-0 z-30">
   <div class="max-w-[1500px] mx-auto px-4 md:px-7">
@@ -4244,6 +4284,46 @@ function openOwnerPortal(filter = 'ALL') {
   `);
 }
 
+
+let splashDismissed = false;
+function dismissSplashScreen() {
+  if (splashDismissed) return;
+  splashDismissed = true;
+  const splash = $('appSplashScreen');
+  if (splash) {
+    splash.style.opacity = '0';
+    splash.style.transform = 'scale(1.04)';
+    splash.style.pointerEvents = 'none';
+    setTimeout(() => {
+      splash.style.display = 'none';
+      if (splash.parentNode) splash.parentNode.removeChild(splash);
+    }, 520);
+  }
+}
+
+function initSplashScreen() {
+  const pBar = $('splashProgressBar');
+  const pText = $('splashStatusText');
+  if (!pBar) return;
+  
+  requestAnimationFrame(() => {
+    setTimeout(() => { if (pBar) pBar.style.width = '100%'; }, 50);
+  });
+
+  setTimeout(() => {
+    if (!splashDismissed && pText) pText.innerText = 'Checking security & roster...';
+  }, 1100);
+
+  setTimeout(() => {
+    if (!splashDismissed && pText) pText.innerText = 'Readying club access...';
+  }, 2200);
+
+  setTimeout(() => {
+    dismissSplashScreen();
+  }, 3000);
+}
+
+initSplashScreen();
 loadData();purgeLegacyDemoMembers();renderDashboard();renderSettings();applyRoleDOMClasses();updateUserRoleUI();updateNetworkSyncBadge();initSupabase(true).then(async connected=>{await checkAuthSession();if(connected){await processOfflineSyncQueue();syncFromSupabase(true);}});
 
 if ('serviceWorker' in navigator) {
