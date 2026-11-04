@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.vercel.gym_management_one_beige.twa",
+      "sha256_cert_fingerprints": [
+        "49:BE:D0:2D:6D:45:62:4E:80:D7:36:C6:59:9F:B7:C8:18:1B:8E:11:45:59:47:FF:9D:3F:5B:05:A9:D1:9A:DB"
+      ]
+    }
+  }
+]
