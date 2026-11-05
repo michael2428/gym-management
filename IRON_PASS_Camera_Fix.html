@@ -3493,23 +3493,10 @@ function showAuthOverlay() {
     ov.style.display = 'flex';
     document.body.style.overflow = 'hidden';
     clearAuthNotice();
-    // In native Capacitor APK, hide Google OAuth button (opens Chrome, can't return)
-    const isNativeApp = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
     const googleBtn = $('googleSignInBtn');
-    if (googleBtn) {
-      if (isNativeApp) {
-        googleBtn.style.display = 'none';
-        if (!$('nativeGoogleNote')) {
-          const note = document.createElement('p');
-          note.id = 'nativeGoogleNote';
-          note.style.cssText = 'font-size:11px;color:#71717a;text-align:center;margin:4px 0 0 0;padding:6px 12px;background:#f5f4f0;border-radius:10px;border:1px solid #e5e0d8;';
-          note.innerHTML = '<i class="fa-solid fa-lock mr-1" style="color:#b8933f"></i>Use <b>Email & Password</b> or the <b>Owner PIN</b> below to sign in.';
-          if (googleBtn.parentNode) googleBtn.parentNode.insertBefore(note, googleBtn.nextSibling);
-        }
-      } else {
-        googleBtn.style.display = '';
-      }
-    }
+    if (googleBtn) googleBtn.style.display = '';
+    const note = $('nativeGoogleNote');
+    if (note) note.remove();
   }
 }
 
@@ -3992,50 +3979,104 @@ function setupSupabaseAuthListener() {
   }
 }
 
+async function handleExternalOAuthCallback(payload) {
+  if (!payload) return;
+  console.log('Received external OAuth callback');
+  try {
+    let clean = payload;
+    if (clean.includes('#')) clean = clean.substring(clean.indexOf('#') + 1);
+    if (clean.includes('?')) clean = clean.substring(clean.indexOf('?') + 1);
+
+    const params = new URLSearchParams(clean);
+    const accessToken = params.get('access_token');
+    const refreshToken = params.get('refresh_token');
+
+    if (accessToken) {
+      if (!supabaseClient) await initSupabase(true);
+      if (supabaseClient) {
+        setAuthLoading(true, 'Connecting Google account...');
+        const { data, error } = await supabaseClient.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken || ''
+        });
+        if (!error && data && data.user) {
+          loginUserSuccess(data.user, data.user.email, 'Google Account Connected Successfully!');
+          return;
+        }
+      }
+    }
+  } catch (err) {
+    console.error('handleExternalOAuthCallback error:', err);
+  }
+  checkAuthSession();
+}
+
 function showReturnToAppOverlay(hash) {
   try {
     let existing = $('returnToAppOverlay');
     if (existing) return;
+
+    let clean = hash || '';
+    if (clean.startsWith('#')) clean = clean.substring(1);
+    if (clean.startsWith('?')) clean = clean.substring(1);
+
+    const intentUrl = 'intent://login?' + clean + '#Intent;scheme=com.wolisogym.app;package=com.wolisogym.app;end';
+    const directSchemeUrl = 'com.wolisogym.app://login?' + clean;
+
     const overlay = document.createElement('div');
     overlay.id = 'returnToAppOverlay';
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(18,18,20,0.96);z-index:9999999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;font-family:system-ui,-apple-system,sans-serif;';
+    overlay.style.cssText = 'position:fixed;inset:0;background:linear-gradient(180deg,#121214 0%,#09090b 100%);z-index:9999999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;font-family:system-ui,-apple-system,sans-serif;color:#ffffff;';
     overlay.innerHTML = `
-      <div style="width:76px;height:76px;border-radius:24px;background:linear-gradient(135deg, #e5c365 0%, #b8933f 50%, #7a5c20 100%);display:flex;align-items:center;justify-content:center;margin-bottom:18px;box-shadow:0 8px 30px rgba(184,147,63,0.45);border:1px solid rgba(255,255,255,0.2);">
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+      <div style="width:84px;height:84px;border-radius:26px;background:linear-gradient(135deg, #e5c365 0%, #b8933f 50%, #7a5c20 100%);display:flex;align-items:center;justify-content:center;margin-bottom:20px;box-shadow:0 12px 40px rgba(184,147,63,0.55);border:1.5px solid rgba(255,255,255,0.25);">
+        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
       </div>
       <h2 style="color:#ffffff;font-size:24px;font-weight:900;margin:0 0 8px 0;letter-spacing:-0.02em;">Google Login Verified!</h2>
-      <p style="color:#a1a1aa;font-size:13px;max-width:320px;line-height:1.45;margin:0 0 24px 0;">Authentication complete. Tap the button below to return straight into your Woliso Gym app:</p>
-      <a href="com.wolisogym.app://login${hash}" style="background:linear-gradient(135deg, #b8933f 0%, #7a5c20 100%);color:#ffffff;padding:16px 34px;font-size:16px;font-weight:800;border-radius:16px;box-shadow:0 8px 24px rgba(184,147,63,0.45);text-decoration:none;display:inline-flex;align-items:center;gap:10px;">
+      <p style="color:#a1a1aa;font-size:14px;max-width:320px;line-height:1.5;margin:0 0 24px 0;">Authentication confirmed. Tap below to return directly into your <b>Woliso Gym</b> app:</p>
+
+      <a id="returnAppBtn" href="${intentUrl}" style="background:linear-gradient(135deg, #e5c365 0%, #b8933f 100%);color:#000000;padding:18px 36px;font-size:16px;font-weight:900;border-radius:18px;box-shadow:0 10px 30px rgba(184,147,63,0.5);text-decoration:none;display:inline-flex;align-items:center;gap:10px;margin-bottom:14px;">
         <span>Open Woliso Gym App &rarr;</span>
       </a>
+
+      <div style="margin-top:12px;">
+        <a href="${directSchemeUrl}" style="color:#b8933f;font-size:13px;font-weight:600;text-decoration:underline;">
+          Tap here if app didn't open automatically
+        </a>
+      </div>
     `;
     document.body.appendChild(overlay);
+
+    // Auto-launch intent after short delay
+    setTimeout(() => {
+      try { window.location.href = intentUrl; } catch(e) {}
+    }, 150);
   } catch(e) {}
 }
 
 async function checkAuthSession() {
+  if (window.__pendingOAuthPayload) {
+    const p = window.__pendingOAuthPayload;
+    window.__pendingOAuthPayload = null;
+    await handleExternalOAuthCallback(p);
+    return true;
+  }
+
   const isUnlockedOffline = localStorage.getItem('ironpass_offline_unlocked') === 'true' || sessionStorage.getItem('ironpass_offline_unlocked') === 'true';
 
-  // Clean URL hash if returning from OAuth & Auto-bounce to app if in external browser
+  // Handle OAuth callback in URL hash
   if (window.location.hash && window.location.hash.includes('access_token')) {
     const hash = window.location.hash;
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+    const isCapacitorNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 
-    if (isMobile && !isStandalone) {
+    if (!isCapacitorNative) {
+      // In external browser (Chrome) on mobile: show overlay and route back into app
       showReturnToAppOverlay(hash);
-      setTimeout(() => {
-        try {
-          window.location.href = 'com.wolisogym.app://login' + hash;
-        } catch (e) {}
-      }, 400);
+      return false;
+    } else {
+      // Inside native app: process tokens immediately
+      await handleExternalOAuthCallback(hash);
+      try { window.history.replaceState(null, '', window.location.pathname); } catch(e) {}
+      return true;
     }
-
-    setTimeout(() => {
-      try {
-        window.history.replaceState(null, '', window.location.pathname);
-      } catch (e) {}
-    }, 2000);
   }
 
   // If offline or supabaseClient failed to initialize, check if we have cached auth or offline PIN
@@ -4081,7 +4122,6 @@ async function checkAuthSession() {
       return true;
     }
     showAuthOverlay();
-    updateNetworkSyncBadge('offline');
     return false;
   }
 }
