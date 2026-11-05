@@ -2117,29 +2117,19 @@ function embedOwnerTag(notes) {
 }
 
 function isRowOwnedByCurrentUser(r) {
-  if (!currentAuthUser) return false;
-  const myUid = getAuthUserId();
-  const myShortUid = getAuthShortUid();
-
-  if (r.user_id && r.user_id === myUid) return true;
-  if (r.owner_id && r.owner_id === myUid) return true;
-  const match = (r.notes || r.details || '').match(/\[acc:([a-zA-Z0-9_-]+)\]/);
-  if (match && match[1] === myUid) return true;
-  if (r.id && r.id.endsWith('_' + myShortUid)) return true;
-  if (r.date && r.date.endsWith('_' + myShortUid)) return true;
-  return false;
+  // All gym records belong to Woliso Gym & ITF. Any authenticated staff member has access.
+  return true;
 }
 
 function getUserStorageKey(baseKey) {
-  const shortUid = getAuthShortUid();
-  if (shortUid === 'anon') return baseKey;
-  return `${baseKey}_${shortUid}`;
+  // Unified single-gym data store for Woliso Gym & ITF - both Owner & Manager phones share this
+  return baseKey;
 }
 
 function memberToRow(m){
-  const dbId = m.dbId || getScopedMemberDbId(m.id);
+  const cleanId = getLocalMemberId(m.id || m.dbId);
   const row = {
-    id: dbId,
+    id: cleanId,
     full_name: m.fullName || '',
     photo: m.photo || null,
     category: m.category || 'GYM',
@@ -2736,10 +2726,8 @@ async function syncFromSupabase(silent=false){
     await processOfflineSyncQueue();
 
     // 1. Members: Query and filter strictly for this account
+    // Query all gym members for Woliso Gym
     let memberQuery = supabaseClient.from('members').select('*');
-    if (hasSupabaseUserIdColumn && currentAuthUser?.id) {
-      memberQuery = memberQuery.eq('user_id', currentAuthUser.id);
-    }
     let memberRows = null;
     const {data:mRows, error:memberErr} = await memberQuery.order('id',{ascending:true});
     if(memberErr){
@@ -2793,9 +2781,6 @@ async function syncFromSupabase(silent=false){
 
     // 2. Audit Log: Merge without duplicate IDs
     let auditQuery = supabaseClient.from('audit_log').select('*');
-    if (hasSupabaseUserIdColumn && currentAuthUser?.id) {
-      auditQuery = auditQuery.eq('user_id', currentAuthUser.id);
-    }
     const {data:auditRows,error:auditErr} = await auditQuery.order('timestamp',{ascending:false}).limit(1000);
     if(!auditErr && Array.isArray(auditRows)){
       const cloudAudits = auditRows.filter(isRowOwnedByCurrentUser).map(auditFromRow);
@@ -3075,6 +3060,28 @@ async function purgeLegacyDemoMembers() {
 }
 
 function loadData(){
+  // Recover any members saved under previous tenant keys
+  try {
+    const baseMembers = readJSON('ironpass_members', []);
+    const idSet = new Set(baseMembers.map(m => m.id));
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('ironpass_members_') && k !== 'ironpass_members') {
+        const oldItems = readJSON(k, []);
+        if (Array.isArray(oldItems)) {
+          oldItems.forEach(item => {
+            const cleanId = getLocalMemberId(item.id);
+            if (!idSet.has(cleanId)) {
+              baseMembers.push({ ...item, id: cleanId });
+              idSet.add(cleanId);
+            }
+          });
+        }
+      }
+    }
+    writeJSON('ironpass_members', baseMembers);
+  } catch(e) {}
+
   if (!currentAuthUser) {
     const cachedAuth = readJSON('ironpass_auth_user', null);
     if (cachedAuth && cachedAuth.id) {
@@ -3706,7 +3713,7 @@ async function handleEmailAuth(e) {
 
       setAuthLoading(false);
       const user = (data && (data.session?.user || data.user)) || {
-        id: 'usr_' + Date.now(),
+        id: 'usr_' + (btoa(email.toLowerCase()).replace(/[^a-zA-Z0-9]/g, '').slice(0, 16) || 'staff'),
         email: email,
         app_metadata: { provider: 'email' }
       };
@@ -3725,7 +3732,7 @@ async function handleEmailAuth(e) {
         if (msg.includes('email not confirmed') || msg.includes('not confirmed')) {
           setAuthLoading(false);
           const fallbackUser = {
-            id: 'usr_' + Date.now(),
+            id: 'usr_' + (btoa(email.toLowerCase()).replace(/[^a-zA-Z0-9]/g, '').slice(0, 16) || 'staff'),
             email: email,
             app_metadata: { provider: 'email' }
           };
@@ -4013,41 +4020,101 @@ async function handleExternalOAuthCallback(payload) {
 
 function showReturnToAppOverlay(hash) {
   try {
-    let existing = $('returnToAppOverlay');
-    if (existing) return;
-
     let clean = hash || '';
     if (clean.startsWith('#')) clean = clean.substring(1);
     if (clean.startsWith('?')) clean = clean.substring(1);
 
-    const intentUrl = 'intent://login?' + clean + '#Intent;scheme=com.wolisogym.app;package=com.wolisogym.app;end';
+    const intentUrl = 'intent://login?' + clean + '#Intent;scheme=com.wolisogym.app;package=com.wolisogym.app;end;';
     const directSchemeUrl = 'com.wolisogym.app://login?' + clean;
 
-    const overlay = document.createElement('div');
-    overlay.id = 'returnToAppOverlay';
-    overlay.style.cssText = 'position:fixed;inset:0;background:linear-gradient(180deg,#121214 0%,#09090b 100%);z-index:9999999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;font-family:system-ui,-apple-system,sans-serif;color:#ffffff;';
-    overlay.innerHTML = `
-      <div style="width:84px;height:84px;border-radius:26px;background:linear-gradient(135deg, #e5c365 0%, #b8933f 50%, #7a5c20 100%);display:flex;align-items:center;justify-content:center;margin-bottom:20px;box-shadow:0 12px 40px rgba(184,147,63,0.55);border:1.5px solid rgba(255,255,255,0.25);">
-        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
-      </div>
-      <h2 style="color:#ffffff;font-size:24px;font-weight:900;margin:0 0 8px 0;letter-spacing:-0.02em;">Google Login Verified!</h2>
-      <p style="color:#a1a1aa;font-size:14px;max-width:320px;line-height:1.5;margin:0 0 24px 0;">Authentication confirmed. Tap below to return directly into your <b>Woliso Gym</b> app:</p>
-
-      <a id="returnAppBtn" href="${intentUrl}" style="background:linear-gradient(135deg, #e5c365 0%, #b8933f 100%);color:#000000;padding:18px 36px;font-size:16px;font-weight:900;border-radius:18px;box-shadow:0 10px 30px rgba(184,147,63,0.5);text-decoration:none;display:inline-flex;align-items:center;gap:10px;margin-bottom:14px;">
-        <span>Open Woliso Gym App &rarr;</span>
-      </a>
-
-      <div style="margin-top:12px;">
-        <a href="${directSchemeUrl}" style="color:#b8933f;font-size:13px;font-weight:600;text-decoration:underline;">
-          Tap here if app didn't open automatically
+    // In Chrome on mobile, wipe the document completely to avoid showing the web app in Chrome
+    document.documentElement.innerHTML = `
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+        <title>Returning to Woliso Gym App</title>
+        <style>
+          * { margin:0; padding:0; box-sizing:border-box; }
+          body {
+            background: linear-gradient(180deg, #121214 0%, #09090b 100%);
+            color: #ffffff;
+            font-family: system-ui, -apple-system, Roboto, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            text-align: center;
+          }
+          .badge {
+            width: 88px;
+            height: 88px;
+            border-radius: 28px;
+            background: linear-gradient(135deg, #e5c365 0%, #b8933f 50%, #7a5c20 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 24px;
+            box-shadow: 0 16px 48px rgba(184,147,63,0.55);
+            border: 2px solid rgba(255,255,255,0.3);
+          }
+          h1 {
+            font-size: 26px;
+            font-weight: 900;
+            margin-bottom: 8px;
+            letter-spacing: -0.02em;
+          }
+          p {
+            color: #a1a1aa;
+            font-size: 15px;
+            line-height: 1.5;
+            max-width: 320px;
+            margin-bottom: 28px;
+          }
+          .btn-open {
+            display: inline-block;
+            background: linear-gradient(135deg, #e5c365 0%, #b8933f 100%);
+            color: #000000;
+            padding: 20px 40px;
+            font-size: 18px;
+            font-weight: 900;
+            border-radius: 20px;
+            text-decoration: none;
+            box-shadow: 0 12px 36px rgba(184,147,63,0.6);
+            letter-spacing: 0.01em;
+          }
+          .fallback {
+            margin-top: 18px;
+            font-size: 13px;
+            color: #71717a;
+          }
+          .fallback a {
+            color: #d4af37;
+            text-decoration: underline;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="badge">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+        </div>
+        <h1>Google Login Verified!</h1>
+        <p>Authentication complete. Tap below to return directly into your <b>Woliso Gym</b> app:</p>
+        
+        <a id="openAppBtn" class="btn-open" href="${intentUrl}">
+          Open Woliso Gym App &rarr;
         </a>
-      </div>
-    `;
-    document.body.appendChild(overlay);
 
-    // Auto-launch intent after short delay
+        <div class="fallback">
+          <p style="margin-bottom:8px;font-size:12px;">App didn't open automatically?</p>
+          <a href="${directSchemeUrl}">Click here for Direct Scheme</a>
+        </div>
+      </body>
+    `;
+
+    // Attempt auto-launch via Intent URI immediately
     setTimeout(() => {
-      try { window.location.href = intentUrl; } catch(e) {}
+      try { window.location.replace(intentUrl); } catch(e) {}
     }, 150);
   } catch(e) {}
 }
