@@ -2382,6 +2382,12 @@ async function triggerManualSync() {
     updateNetworkSyncBadge('offline');
     return;
   }
+  // If not authenticated and running as native app, show sign in overlay instead of opening browser
+  if (!currentAuthUser && !supabaseClient) {
+    toast('Sign in first to sync with cloud.', 'info');
+    showAuthOverlay();
+    return;
+  }
   toast('Synchronizing with Supabase cloud...', 'info');
   await processOfflineSyncQueue();
   await syncFromSupabase(false);
@@ -3487,6 +3493,23 @@ function showAuthOverlay() {
     ov.style.display = 'flex';
     document.body.style.overflow = 'hidden';
     clearAuthNotice();
+    // In native Capacitor APK, hide Google OAuth button (opens Chrome, can't return)
+    const isNativeApp = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+    const googleBtn = $('googleSignInBtn');
+    if (googleBtn) {
+      if (isNativeApp) {
+        googleBtn.style.display = 'none';
+        if (!$('nativeGoogleNote')) {
+          const note = document.createElement('p');
+          note.id = 'nativeGoogleNote';
+          note.style.cssText = 'font-size:11px;color:#71717a;text-align:center;margin:4px 0 0 0;padding:6px 12px;background:#f5f4f0;border-radius:10px;border:1px solid #e5e0d8;';
+          note.innerHTML = '<i class="fa-solid fa-lock mr-1" style="color:#b8933f"></i>Use <b>Email & Password</b> or the <b>Owner PIN</b> below to sign in.';
+          if (googleBtn.parentNode) googleBtn.parentNode.insertBefore(note, googleBtn.nextSibling);
+        }
+      } else {
+        googleBtn.style.display = '';
+      }
+    }
   }
 }
 
