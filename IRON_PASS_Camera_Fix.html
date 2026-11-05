@@ -3527,7 +3527,12 @@ function clearAuthNotice() {
   }
 }
 
+let authLoadingTimeout = null;
 function setAuthLoading(loading, text = '') {
+  if (authLoadingTimeout) {
+    clearTimeout(authLoadingTimeout);
+    authLoadingTimeout = null;
+  }
   const submitBtn = $('authSubmitBtn');
   const googleBtn = $('googleSignInBtn');
   const submitText = $('authSubmitText');
@@ -3538,6 +3543,11 @@ function setAuthLoading(loading, text = '') {
     if (googleBtn) googleBtn.disabled = true;
     if (submitText) submitText.innerHTML = `<i class="fa-solid fa-spinner animate-spin mr-1.5"></i>${esc(text || 'Processing...')}`;
     if (googleText && text.toLowerCase().includes('google')) googleText.textContent = text;
+
+    // Safety timeout: Automatically re-enable all buttons after 4 seconds so the screen never freezes!
+    authLoadingTimeout = setTimeout(() => {
+      setAuthLoading(false);
+    }, 4000);
   } else {
     if (submitBtn) submitBtn.disabled = false;
     if (googleBtn) googleBtn.disabled = false;
@@ -3549,6 +3559,7 @@ function setAuthLoading(loading, text = '') {
 function setAuthTab(mode) {
   authMode = mode;
   clearAuthNotice();
+  setAuthLoading(false); // Instantly unfreeze and re-enable buttons on tab touch!
   const tabSignIn = $('authTabSignIn');
   const tabSignUp = $('authTabSignUp');
   const submitText = $('authSubmitText');
@@ -3618,7 +3629,8 @@ async function handleGoogleSignIn() {
     if (!supabaseClient) await initSupabase(true);
     if (!supabaseClient) throw new Error('Database security service unavailable. Please check your internet connection.');
 
-    const redirectUrl = window.location.origin + window.location.pathname;
+    // Always redirect to production domain so Chrome catches the callback and hands it to the native app!
+    const redirectUrl = 'https://gym-management-one-beige.vercel.app';
     const { data, error } = await supabaseClient.auth.signInWithOAuth({
       provider: 'google',
       options: {
@@ -3957,6 +3969,27 @@ function setupSupabaseAuthListener() {
   }
 }
 
+function showReturnToAppOverlay(hash) {
+  try {
+    let existing = $('returnToAppOverlay');
+    if (existing) return;
+    const overlay = document.createElement('div');
+    overlay.id = 'returnToAppOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(18,18,20,0.96);z-index:9999999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;font-family:system-ui,-apple-system,sans-serif;';
+    overlay.innerHTML = `
+      <div style="width:76px;height:76px;border-radius:24px;background:linear-gradient(135deg, #e5c365 0%, #b8933f 50%, #7a5c20 100%);display:flex;align-items:center;justify-content:center;margin-bottom:18px;box-shadow:0 8px 30px rgba(184,147,63,0.45);border:1px solid rgba(255,255,255,0.2);">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+      </div>
+      <h2 style="color:#ffffff;font-size:24px;font-weight:900;margin:0 0 8px 0;letter-spacing:-0.02em;">Google Login Verified!</h2>
+      <p style="color:#a1a1aa;font-size:13px;max-width:320px;line-height:1.45;margin:0 0 24px 0;">Authentication complete. Tap the button below to return straight into your Woliso Gym app:</p>
+      <a href="com.wolisogym.app://login${hash}" style="background:linear-gradient(135deg, #b8933f 0%, #7a5c20 100%);color:#ffffff;padding:16px 34px;font-size:16px;font-weight:800;border-radius:16px;box-shadow:0 8px 24px rgba(184,147,63,0.45);text-decoration:none;display:inline-flex;align-items:center;gap:10px;">
+        <span>Open Woliso Gym App &rarr;</span>
+      </a>
+    `;
+    document.body.appendChild(overlay);
+  } catch(e) {}
+}
+
 async function checkAuthSession() {
   const isUnlockedOffline = localStorage.getItem('ironpass_offline_unlocked') === 'true' || sessionStorage.getItem('ironpass_offline_unlocked') === 'true';
 
@@ -3967,16 +4000,12 @@ async function checkAuthSession() {
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
 
     if (isMobile && !isStandalone) {
-      setTimeout(() => {
-        try {
-          window.location.href = 'intent://gym-management-one-beige.vercel.app/' + hash + '#Intent;scheme=https;package=app.vercel.gym_management_one_beige.twa;end';
-        } catch (e) {}
-      }, 300);
+      showReturnToAppOverlay(hash);
       setTimeout(() => {
         try {
           window.location.href = 'com.wolisogym.app://login' + hash;
         } catch (e) {}
-      }, 1000);
+      }, 400);
     }
 
     setTimeout(() => {
