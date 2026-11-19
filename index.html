@@ -1944,6 +1944,38 @@ body.role-manager .role-banner-manager {
 <div id="toastHost" class="toast-host" aria-live="polite"></div>
 <div id="printArea" class="hidden"></div>
 <script>
+
+  // Listen for the app opening from the custom URL
+Capacitor.Plugins.App.addListener('appUrlOpen', async (data) => {
+  
+  // Check if it's our login redirect
+  if (data.url.includes('com.wolisogym.app://')) {
+    
+    // Extract the access tokens from the URL hash
+    const hashString = data.url.split('#')[1];
+    if (hashString) {
+      const urlParams = new URLSearchParams(hashString);
+      const accessToken = urlParams.get('access_token');
+      const refreshToken = urlParams.get('refresh_token');
+
+      // If we found the tokens, hand them to Supabase!
+      if (accessToken && refreshToken) {
+        const { error } = await supabaseClient.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken
+        });
+
+        if (!error) {
+          console.log("Successfully connected to Supabase!");
+          // Optional: You can trigger a UI refresh here to remove the Offline badge
+        } else {
+          console.error("Error setting session:", error);
+        }
+      }
+    }
+  }
+});
+
 'use strict';
 const KEYS={members:'ironpass_members',audit:'ironpass_auditlog',settings:'ironpass_settings',version:'ironpass_schema_version',supabaseUrl:'ironpass_supabase_url',supabaseKey:'ironpass_supabase_key',supabaseRealtime:'ironpass_supabase_realtime'};
 const SCHEMA_VERSION=1;
@@ -1971,12 +2003,12 @@ function seedAudit(){return [];}
 
 // --- SUPABASE POSTGRESQL SCHEMA & INTEGRATION ---
 const SUPABASE_SQL_SCHEMA = `-- ====================================================================
--- WOLISO GYM & ITF | Multi-Account Privacy, Isolation & Security Schema
+-- WOLISO GYM & ITF | Complete Supabase Database Schema & Sync Engine
 -- ====================================================================
 -- Instructions:
--- 1. Open your Supabase Dashboard at https://supabase.com
+-- 1. Open your Supabase Dashboard: https://supabase.com/dashboard/project/przdrpcppvyjbfmyhczm
 -- 2. Click 'SQL Editor' in the left menu -> 'New query'
--- 3. Paste this entire script and click 'RUN'
+-- 3. Paste this entire script and click 'RUN' (green button)
 -- ====================================================================
 
 -- 1. CREATE TABLES (If not already created)
@@ -1994,7 +2026,8 @@ CREATE TABLE IF NOT EXISTS public.members (
     monthly_fee NUMERIC(10,2) DEFAULT 0,
     notes TEXT DEFAULT '',
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    last_check_in TIMESTAMPTZ
+    last_check_in TIMESTAMPTZ,
+    user_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS public.audit_log (
@@ -2003,13 +2036,15 @@ CREATE TABLE IF NOT EXISTS public.audit_log (
     member_name TEXT NOT NULL DEFAULT 'System',
     action TEXT NOT NULL,
     timestamp TIMESTAMPTZ DEFAULT NOW(),
-    details TEXT DEFAULT ''
+    details TEXT DEFAULT '',
+    user_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS public.rollcall (
     date TEXT PRIMARY KEY,
     present_ids JSONB DEFAULT '[]'::jsonb,
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    user_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS public.settings (
@@ -2017,66 +2052,69 @@ CREATE TABLE IF NOT EXISTS public.settings (
     club_name TEXT DEFAULT 'WOLISO GYM & ITF',
     opening_hour INTEGER DEFAULT 6,
     currency TEXT DEFAULT 'ETB',
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    user_id TEXT
 );
 
--- 2. ADD USER_ID COLUMN (Isolates data per logged-in Gmail/Email account)
-ALTER TABLE public.members ADD COLUMN IF NOT EXISTS user_id TEXT;
-ALTER TABLE public.audit_log ADD COLUMN IF NOT EXISTS user_id TEXT;
-ALTER TABLE public.rollcall ADD COLUMN IF NOT EXISTS user_id TEXT;
-ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS user_id TEXT;
-
--- 3. CREATE PERFORMANCE INDEXES
-CREATE INDEX IF NOT EXISTS idx_members_user_id ON public.members(user_id);
-CREATE INDEX IF NOT EXISTS idx_audit_user_id ON public.audit_log(user_id);
-
--- 4. ENABLE ROW LEVEL SECURITY (RLS)
+-- 2. ENABLE ROW LEVEL SECURITY (RLS)
 ALTER TABLE public.members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.rollcall ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
 
--- 5. DROP LEGACY PUBLIC POLICIES
+-- 3. DROP RESTRICTIVE POLICIES
+DROP POLICY IF EXISTS "Users access own members" ON public.members;
+DROP POLICY IF EXISTS "Gym staff access members" ON public.members;
 DROP POLICY IF EXISTS "Allow public read members" ON public.members;
 DROP POLICY IF EXISTS "Allow public insert members" ON public.members;
 DROP POLICY IF EXISTS "Allow public update members" ON public.members;
 DROP POLICY IF EXISTS "Allow public delete members" ON public.members;
+
+DROP POLICY IF EXISTS "Users access own audit" ON public.audit_log;
+DROP POLICY IF EXISTS "Gym staff access audit" ON public.audit_log;
 DROP POLICY IF EXISTS "Allow public read audit_log" ON public.audit_log;
 DROP POLICY IF EXISTS "Allow public insert audit_log" ON public.audit_log;
 DROP POLICY IF EXISTS "Allow public update audit_log" ON public.audit_log;
-DROP POLICY IF EXISTS "Allow public delete audit_log" ON public.audit_log;
+
+DROP POLICY IF EXISTS "Users access own rollcall" ON public.rollcall;
+DROP POLICY IF EXISTS "Gym staff access rollcall" ON public.rollcall;
 DROP POLICY IF EXISTS "Allow public read rollcall" ON public.rollcall;
 DROP POLICY IF EXISTS "Allow public insert rollcall" ON public.rollcall;
 DROP POLICY IF EXISTS "Allow public update rollcall" ON public.rollcall;
-DROP POLICY IF EXISTS "Allow public delete rollcall" ON public.rollcall;
 
--- 6. CREATE STRICT PER-ACCOUNT ISOLATION POLICIES
-DROP POLICY IF EXISTS "Users access own members" ON public.members;
-CREATE POLICY "Users access own members" ON public.members
-FOR ALL TO authenticated
-USING (auth.uid()::text = user_id OR user_id IS NULL)
-WITH CHECK (auth.uid()::text = user_id);
+DROP POLICY IF EXISTS "Users access own settings" ON public.settings;
+DROP POLICY IF EXISTS "Gym staff access settings" ON public.settings;
 
-DROP POLICY IF EXISTS "Users access own audit" ON public.audit_log;
-CREATE POLICY "Users access own audit" ON public.audit_log
-FOR ALL TO authenticated
-USING (auth.uid()::text = user_id OR user_id IS NULL)
-WITH CHECK (auth.uid()::text = user_id);
+-- 4. CREATE UNIFIED WOLISO GYM ACCESS POLICIES (Full Owner & Manager Sync)
+CREATE POLICY "Gym staff access members" ON public.members
+FOR ALL TO anon, authenticated
+USING (true)
+WITH CHECK (true);
 
-DROP POLICY IF EXISTS "Users access own rollcall" ON public.rollcall;
-CREATE POLICY "Users access own rollcall" ON public.rollcall
-FOR ALL TO authenticated
-USING (auth.uid()::text = user_id OR user_id IS NULL)
-WITH CHECK (auth.uid()::text = user_id);
+CREATE POLICY "Gym staff access audit" ON public.audit_log
+FOR ALL TO anon, authenticated
+USING (true)
+WITH CHECK (true);
 
--- 7. REALTIME REPLICATION (Instant sync per account)
+CREATE POLICY "Gym staff access rollcall" ON public.rollcall
+FOR ALL TO anon, authenticated
+USING (true)
+WITH CHECK (true);
+
+CREATE POLICY "Gym staff access settings" ON public.settings
+FOR ALL TO anon, authenticated
+USING (true)
+WITH CHECK (true);
+
+-- 5. ENABLE REALTIME REPLICATION (Instant WebSocket Push to all devices)
 DO $$
 BEGIN
   BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.members; EXCEPTION WHEN duplicate_object THEN END;
   BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.audit_log; EXCEPTION WHEN duplicate_object THEN END;
   BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.rollcall; EXCEPTION WHEN duplicate_object THEN END;
-END $$;`;
-
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.settings; EXCEPTION WHEN duplicate_object THEN END;
+END $$;
+`;
 
 // --- MULTI-ACCOUNT TENANT DATA ISOLATION HELPERS ---
 let hasSupabaseUserIdColumn = false;
@@ -2091,11 +2129,7 @@ function getAuthShortUid() {
 }
 
 function getScopedMemberDbId(localId) {
-  if (!localId) return '';
-  const shortUid = getAuthShortUid();
-  if (shortUid === 'anon') return localId;
-  if (localId.includes('_' + shortUid)) return localId;
-  return `${localId}_${shortUid}`;
+  return getLocalMemberId(localId);
 }
 
 function getLocalMemberId(dbId) {
@@ -2171,16 +2205,14 @@ function memberFromRow(r){
 }
 
 function auditToRow(a){
-  const shortUid = getAuthShortUid();
-  const baseId = a.id || uid();
-  const dbId = baseId.includes('_' + shortUid) ? baseId : `${baseId}_${shortUid}`;
+  const cleanId = a.id || uid();
   const row = {
-    id: dbId,
-    member_id: a.memberId ? getScopedMemberDbId(a.memberId) : null,
+    id: cleanId,
+    member_id: a.memberId ? getLocalMemberId(a.memberId) : (a.memberId || null),
     member_name: a.memberName || 'System',
-    action: a.action,
+    action: a.action || 'UPDATE',
     timestamp: a.timestamp || new Date().toISOString(),
-    details: embedOwnerTag(a.details || '')
+    details: cleanNotes(a.details || '')
   };
   if (hasSupabaseUserIdColumn && currentAuthUser?.id) {
     row.user_id = currentAuthUser.id;
@@ -2270,12 +2302,13 @@ let isProcessingSyncQueue = false;
 
 async function processOfflineSyncQueue() {
   if (isProcessingSyncQueue) return;
-  if (!supabaseClient || !navigator.onLine) {
+  if (!navigator.onLine || !supabaseClient) {
     updateNetworkSyncBadge();
     return;
   }
+
   const queue = getSyncQueue();
-  if (!queue.length) {
+  if (!queue || queue.length === 0) {
     updateNetworkSyncBadge();
     return;
   }
@@ -2296,22 +2329,16 @@ async function processOfflineSyncQueue() {
         }
         if (res.error) throw res.error;
       } else if (item.type === 'DELETE_MEMBER') {
-        const dbId = getScopedMemberDbId(item.payload.id);
-        let q = supabaseClient.from('members').delete().eq('id', dbId);
-        if (hasSupabaseUserIdColumn && currentAuthUser?.id) q = q.eq('user_id', currentAuthUser.id);
-        const { error } = await q;
+        const cleanId = getLocalMemberId(item.payload.id);
+        const { error } = await supabaseClient.from('members').delete().eq('id', cleanId);
         if (error) throw error;
       } else if (item.type === 'CHECKIN_MEMBER') {
-        const dbId = getScopedMemberDbId(item.payload.id);
-        let q = supabaseClient.from('members').update({ last_check_in: item.payload.timestamp }).eq('id', dbId);
-        if (hasSupabaseUserIdColumn && currentAuthUser?.id) q = q.eq('user_id', currentAuthUser.id);
-        const { error } = await q;
+        const cleanId = getLocalMemberId(item.payload.id);
+        const { error } = await supabaseClient.from('members').update({ last_check_in: item.payload.timestamp }).eq('id', cleanId);
         if (error) throw error;
       } else if (item.type === 'RENEW_MEMBER') {
-        const dbId = getScopedMemberDbId(item.payload.id);
-        let q = supabaseClient.from('members').update({ membership_expiry_date: item.payload.expiryDate }).eq('id', dbId);
-        if (hasSupabaseUserIdColumn && currentAuthUser?.id) q = q.eq('user_id', currentAuthUser.id);
-        const { error } = await q;
+        const cleanId = getLocalMemberId(item.payload.id);
+        const { error } = await supabaseClient.from('members').update({ membership_expiry_date: item.payload.expiryDate }).eq('id', cleanId);
         if (error) throw error;
       } else if (item.type === 'INSERT_AUDIT') {
         const row = auditToRow(item.payload);
@@ -2323,13 +2350,12 @@ async function processOfflineSyncQueue() {
         }
         if (res.error) throw res.error;
       } else if (item.type === 'SAVE_ROLLCALL') {
-        const shortUid = getAuthShortUid();
+        const cleanDate = (item.payload.date || todayISO()).split('_')[0];
         const row = {
-          date: `${item.payload.date}_${shortUid}`,
-          present_ids: item.payload.ids,
+          date: cleanDate,
+          present_ids: item.payload.ids || [],
           updated_at: new Date().toISOString()
         };
-        if (hasSupabaseUserIdColumn && currentAuthUser?.id) row.user_id = currentAuthUser.id;
         let res = await supabaseClient.from('rollcall').upsert(row, { onConflict: 'date' });
         if (res.error && res.error.code === '42703' && row.user_id) {
           hasSupabaseUserIdColumn = false;
@@ -2338,15 +2364,13 @@ async function processOfflineSyncQueue() {
         }
         if (res.error) throw res.error;
       } else if (item.type === 'SAVE_SETTINGS') {
-        const shortUid = getAuthShortUid();
         const row = {
-          id: `settings_${shortUid}`,
-          club_name: item.payload.clubName,
-          opening_hour: Number(item.payload.openingHour),
-          currency: item.payload.currency,
+          id: 'default',
+          club_name: item.payload.clubName || 'WOLISO GYM & ITF',
+          opening_hour: Number(item.payload.openingHour || 6),
+          currency: item.payload.currency || 'ETB',
           updated_at: new Date().toISOString()
         };
-        if (hasSupabaseUserIdColumn && currentAuthUser?.id) row.user_id = currentAuthUser.id;
         let res = await supabaseClient.from('settings').upsert(row, { onConflict: 'id' });
         if (res.error && res.error.code === '42703' && row.user_id) {
           hasSupabaseUserIdColumn = false;
@@ -2514,15 +2538,15 @@ async function dbInsertAudit(entry){
 }
 
 async function dbSaveRollcall(date,setOfIds){
-  const idsArray = Array.from(setOfIds);
+  const idsArray = Array.from(setOfIds || []);
+  const cleanDate = (date || todayISO()).split('_')[0];
   if(!supabaseClient || !navigator.onLine){
-    enqueueSyncOp('SAVE_ROLLCALL', { date, ids: idsArray });
+    enqueueSyncOp('SAVE_ROLLCALL', { date: cleanDate, ids: idsArray });
     return;
   }
   try{
-    const shortUid = getAuthShortUid();
     const row = {
-      date: `${date}_${shortUid}`,
+      date: cleanDate,
       present_ids: idsArray,
       updated_at: new Date().toISOString()
     };
@@ -2537,11 +2561,11 @@ async function dbSaveRollcall(date,setOfIds){
     }
     if(res.error){
       console.warn('Supabase rollcall error, queueing offline:', res.error);
-      enqueueSyncOp('SAVE_ROLLCALL', { date, ids: idsArray });
+      enqueueSyncOp('SAVE_ROLLCALL', { date: cleanDate, ids: idsArray });
     }
   }catch(e){
     console.warn('Network error during rollcall save, queueing offline:', e);
-    enqueueSyncOp('SAVE_ROLLCALL', { date, ids: idsArray });
+    enqueueSyncOp('SAVE_ROLLCALL', { date: cleanDate, ids: idsArray });
   }
 }
 
@@ -2551,12 +2575,11 @@ async function dbSaveSettings(s){
     return;
   }
   try{
-    const shortUid = getAuthShortUid();
     const row = {
-      id: `settings_${shortUid}`,
-      club_name: s.clubName,
-      opening_hour: Number(s.openingHour),
-      currency: s.currency,
+      id: 'default',
+      club_name: s.clubName || 'WOLISO GYM & ITF',
+      opening_hour: Number(s.openingHour || 6),
+      currency: s.currency || 'ETB',
       updated_at: new Date().toISOString()
     };
     if (hasSupabaseUserIdColumn && currentAuthUser?.id) {
@@ -2576,22 +2599,6 @@ async function dbSaveSettings(s){
     console.warn('Network error during settings save, queueing offline:', e);
     enqueueSyncOp('SAVE_SETTINGS', s);
   }
-}
-
-const DEFAULT_SUPABASE_URL = 'https://przdrpcppvyjbfmyhczm.supabase.co';
-const DEFAULT_SUPABASE_KEY = 'sb_publishable_hxtzft_sUWYQHxg3p246mg_Y0vBOAj0';
-
-function getSupabaseConfig(){
-  if(localStorage.getItem('ironpass_supabase_disabled') === 'true'){
-    return { url:'', key:'', realtime:false };
-  }
-  const savedUrl = (localStorage.getItem(KEYS.supabaseUrl) || '').trim();
-  const savedKey = (localStorage.getItem(KEYS.supabaseKey) || '').trim();
-  return {
-    url: savedUrl || DEFAULT_SUPABASE_URL,
-    key: savedKey || DEFAULT_SUPABASE_KEY,
-    realtime: localStorage.getItem(KEYS.supabaseRealtime) !== 'false'
-  };
 }
 
 async function initSupabase(silent=true){
@@ -2634,6 +2641,7 @@ async function initSupabase(silent=true){
     } catch(e) { hasSupabaseUserIdColumn = false; }
     setupSupabaseRealtime();
     setupSupabaseAuthListener();
+    startFastAutoSync();
     return true;
   }catch(err){
     console.error('Supabase connection error:',err);
@@ -2643,6 +2651,36 @@ async function initSupabase(silent=true){
     return false;
   }
 }
+
+
+// --- HIGH-SPEED CONTINUOUS SYNC ENGINE FOR WOLISO GYM ---
+let fastSyncInterval = null;
+function startFastAutoSync() {
+  if (fastSyncInterval) clearInterval(fastSyncInterval);
+  // Auto-sync every 8 seconds when online and app is open
+  fastSyncInterval = setInterval(() => {
+    if (navigator.onLine && supabaseClient && document.visibilityState !== 'hidden') {
+      processOfflineSyncQueue();
+      syncFromSupabase(true);
+    }
+  }, 8000);
+}
+
+// Instant sync when app re-opens or user returns to screen
+window.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && navigator.onLine && supabaseClient) {
+    console.log('App visible, performing high-speed gym sync...');
+    setupSupabaseRealtime();
+    processOfflineSyncQueue();
+    syncFromSupabase(true);
+  }
+});
+
+window.addEventListener('focus', () => {
+  if (navigator.onLine && supabaseClient) {
+    syncFromSupabase(true);
+  }
+});
 
 function setupSupabaseRealtime(){
   if(!supabaseClient)return;
@@ -2715,47 +2753,36 @@ async function syncFromSupabase(silent=false){
     updateNetworkSyncBadge('offline');
     return false;
   }
-  if(!currentAuthUser) return false;
 
   try{
-    if(!silent)toast('Syncing your gym records with cloud...','info');
+    if(!silent) toast('Syncing gym records with cloud...','info');
     updateSupabaseStatusUI('syncing');
     updateNetworkSyncBadge('syncing');
 
-    // 0. Drain any pending offline queue items first so cloud receives local edits
+    // 0. Drain offline queue first
     await processOfflineSyncQueue();
 
-    // 1. Members: Query and filter strictly for this account
-    // Query all gym members for Woliso Gym
-    let memberQuery = supabaseClient.from('members').select('*');
-    let memberRows = null;
-    const {data:mRows, error:memberErr} = await memberQuery.order('id',{ascending:true});
-    if(memberErr){
-      if(memberErr.code === '42703'){
-        hasSupabaseUserIdColumn = false;
-        const retry = await supabaseClient.from('members').select('*').order('id',{ascending:true});
-        if(retry.error) throw retry.error;
-        memberRows = retry.data || [];
-      } else {
-        throw memberErr;
+    // 1. Members: Query all gym members
+    let memberRows = [];
+    const { data: mRows, error: memberErr } = await supabaseClient.from('members').select('*').order('created_at', { ascending: false });
+    if (!memberErr && Array.isArray(mRows)) {
+      memberRows = mRows;
+    } else if (memberErr) {
+      console.warn('Members query error:', memberErr);
+      if (memberErr.code === '42501') {
+        console.warn('RLS permission note: Ensure Supabase policies are active.');
       }
-    } else {
-      memberRows = mRows || [];
     }
 
-    // NON-DESTRUCTIVE HYBRID MERGE:
-    // Never discard local members created or updated while offline!
-    const filteredCloud = (memberRows || []).filter(isRowOwnedByCurrentUser);
-    const cloudMembers = filteredCloud.map(memberFromRow);
+    // Merge members without losing offline edits
+    const cloudMembers = memberRows.map(memberFromRow);
     const localMap = new Map(members.map(m => [m.id, m]));
 
     cloudMembers.forEach(cm => {
       const lm = localMap.get(cm.id);
       if (!lm) {
-        // Cloud has a member that wasn't local -> add it
         localMap.set(cm.id, cm);
       } else {
-        // Merge without losing offline check-in or renewal timestamps
         const merged = {
           ...cm,
           ...lm,
@@ -2767,23 +2794,13 @@ async function syncFromSupabase(silent=false){
       }
     });
 
-    // Check if any local members have not been uploaded yet
-    localMap.forEach((lm) => {
-      const inCloud = cloudMembers.some(cm => cm.id === lm.id || cm.dbId === lm.dbId);
-      if (!inCloud) {
-        // Queued to ensure cloud gets it
-        enqueueSyncOp('UPSERT_MEMBER', lm);
-      }
-    });
-
     members = Array.from(localMap.values());
     persist();
 
-    // 2. Audit Log: Merge without duplicate IDs
-    let auditQuery = supabaseClient.from('audit_log').select('*');
-    const {data:auditRows,error:auditErr} = await auditQuery.order('timestamp',{ascending:false}).limit(1000);
-    if(!auditErr && Array.isArray(auditRows)){
-      const cloudAudits = auditRows.filter(isRowOwnedByCurrentUser).map(auditFromRow);
+    // 2. Audit Log: Merge without duplicates
+    const { data: auditRows } = await supabaseClient.from('audit_log').select('*').order('timestamp', { ascending: false }).limit(500);
+    if (Array.isArray(auditRows) && auditRows.length > 0) {
+      const cloudAudits = auditRows.map(auditFromRow);
       const existingAuditIds = new Set(auditLog.map(a => a.id));
       cloudAudits.forEach(ca => {
         if (!existingAuditIds.has(ca.id)) {
@@ -2796,28 +2813,26 @@ async function syncFromSupabase(silent=false){
       persist();
     }
 
-    // 3. Rollcall: Merge present attendance IDs
-    const shortUid = getAuthShortUid();
-    const todayTarget = `${todayISO()}_${shortUid}`;
-    const {data:rollRows,error:rollErr} = await supabaseClient.from('rollcall').select('*');
-    if(!rollErr && Array.isArray(rollRows)){
-      const todayRoll = rollRows.find(r => r.date === todayTarget || (isRowOwnedByCurrentUser(r) && r.date.startsWith(todayISO())));
-      if(todayRoll && Array.isArray(todayRoll.present_ids)){
+    // 3. Rollcall: Merge present attendance for today
+    const { data: rollRows } = await supabaseClient.from('rollcall').select('*');
+    if (Array.isArray(rollRows) && rollRows.length > 0) {
+      const todayTarget = todayISO();
+      const todayRoll = rollRows.find(r => r.date === todayTarget || r.date.startsWith(todayTarget));
+      if (todayRoll && Array.isArray(todayRoll.present_ids)) {
         const combined = new Set([...rollcallPresent, ...todayRoll.present_ids]);
         rollcallPresent = combined;
-        writeJSON(getUserStorageKey('ip_rollcall_'+todayISO()), Array.from(combined));
+        writeJSON(getUserStorageKey('ip_rollcall_' + todayISO()), Array.from(combined));
       }
     }
 
     // 4. Settings: Merge cloud settings
-    const setTarget = `settings_${shortUid}`;
-    const {data:setRows} = await supabaseClient.from('settings').select('*');
-    if(Array.isArray(setRows)){
-      const mySettings = setRows.find(r => r.id === setTarget || isRowOwnedByCurrentUser(r));
-      if(mySettings){
-        if(mySettings.club_name) settings.clubName = mySettings.club_name;
-        if(mySettings.opening_hour !== undefined && mySettings.opening_hour !== null) settings.openingHour = Number(mySettings.opening_hour);
-        if(mySettings.currency) settings.currency = mySettings.currency;
+    const { data: setRows } = await supabaseClient.from('settings').select('*');
+    if (Array.isArray(setRows) && setRows.length > 0) {
+      const mySettings = setRows.find(r => r.id === 'default') || setRows[0];
+      if (mySettings) {
+        if (mySettings.club_name) settings.clubName = mySettings.club_name;
+        if (mySettings.opening_hour !== undefined && mySettings.opening_hour !== null) settings.openingHour = Number(mySettings.opening_hour);
+        if (mySettings.currency) settings.currency = mySettings.currency;
         persist();
       }
     }
@@ -2825,49 +2840,74 @@ async function syncFromSupabase(silent=false){
     updateSupabaseStatusUI('connected');
     updateNetworkSyncBadge();
     refreshCurrent();
-    if(!silent)toast('Gym records synchronized with Supabase cloud!','success');
+    if (!silent) toast('Gym records synchronized with Supabase cloud!', 'success');
     return true;
-  }catch(err){
-    console.error('Supabase sync error:',err);
-    updateSupabaseStatusUI('error',err.message);
+  } catch (err) {
+    console.error('Supabase sync error:', err);
+    updateSupabaseStatusUI('error', err.message);
     updateNetworkSyncBadge();
-    if(!silent)toast(`Supabase sync failed: ${err.message || 'Network error'}`,'error');
+    if (!silent) toast(`Supabase sync: ${err.message || 'Network error'}`, 'error');
     return false;
   }
 }
 
 async function pushAllToSupabase(){
-  if(!supabaseClient){toast('Please connect to Supabase first.','error');return}
-  if(!confirm(`Upload all local records to Supabase? This will upload ${members.length} members and ${auditLog.length} audit records.`))return;
+  if(!supabaseClient){
+    toast('Please connect to Supabase first.', 'error');
+    return;
+  }
+  if(!confirm(`Upload all ${members.length} member(s) and ${auditLog.length} audit record(s) to cloud?`)) return;
+
   try{
-    toast('Uploading records to Supabase...','info');
+    toast('Uploading records to Supabase...', 'info');
     updateSupabaseStatusUI('syncing');
 
-    const memberRows=members.map(memberToRow);
-    for(let i=0;i<memberRows.length;i+=50){
-      const batch=memberRows.slice(i,i+50);
-      const {error}=await supabaseClient.from('members').upsert(batch,{onConflict:'id'});
-      if(error)throw new Error(`Members upload: ${error.message}`);
+    // 1. Members batch upload
+    const memberRows = members.map(memberToRow);
+    let uploadedCount = 0;
+    for(let i = 0; i < memberRows.length; i += 25){
+      const batch = memberRows.slice(i, i + 25);
+      let res = await supabaseClient.from('members').upsert(batch, { onConflict: 'id' });
+      // If user_id column causes error, strip it and retry
+      if (res.error && res.error.code === '42703') {
+        const cleanBatch = batch.map(b => { const c = { ...b }; delete c.user_id; return c; });
+        res = await supabaseClient.from('members').upsert(cleanBatch, { onConflict: 'id' });
+      }
+      if (res.error) {
+        if (res.error.code === '42501') {
+          throw new Error('Supabase Security Policy (RLS) is blocking uploads. Please run the 1-click SQL fix in your Supabase SQL Editor (see instructions in Settings).');
+        }
+        throw new Error(`Members upload: ${res.error.message}`);
+      }
+      uploadedCount += batch.length;
     }
 
-    const auditRows=auditLog.map(auditToRow);
-    for(let i=0;i<auditRows.length;i+=50){
-      const batch=auditRows.slice(i,i+50);
-      const {error}=await supabaseClient.from('audit_log').upsert(batch,{onConflict:'id'});
-      if(error)throw new Error(`Audit upload: ${error.message}`);
+    // 2. Audit logs batch upload
+    const auditRows = auditLog.map(auditToRow);
+    for(let i = 0; i < auditRows.length; i += 50){
+      const batch = auditRows.slice(i, i + 50);
+      let res = await supabaseClient.from('audit_log').upsert(batch, { onConflict: 'id' });
+      if (res.error && res.error.code === '42703') {
+        const cleanBatch = batch.map(b => { const c = { ...b }; delete c.user_id; return c; });
+        res = await supabaseClient.from('audit_log').upsert(cleanBatch, { onConflict: 'id' });
+      }
+      if (res.error) console.warn('Audit upload note:', res.error);
     }
 
+    // 3. Settings upload
     await dbSaveSettings(settings);
-    if(rollcallPresent.size>0){
-      await dbSaveRollcall(todayISO(),rollcallPresent);
+
+    // 4. Rollcall upload
+    if (rollcallPresent.size > 0) {
+      await dbSaveRollcall(todayISO(), rollcallPresent);
     }
 
     updateSupabaseStatusUI('connected');
-    toast(`Successfully uploaded ${members.length} members and ${auditLog.length} audit logs to Supabase!`,'success');
+    toast(`Successfully uploaded ${uploadedCount} members and all records to Supabase!`, 'success');
   }catch(err){
-    console.error('Push to Supabase failed:',err);
-    updateSupabaseStatusUI('error',err.message);
-    toast(`Upload failed: ${err.message}`,'error');
+    console.error('Push to Supabase failed:', err);
+    updateSupabaseStatusUI('error', err.message);
+    toast(err.message, 'error', true);
   }
 }
 
@@ -3647,7 +3687,7 @@ async function handleGoogleSignIn() {
     if (!supabaseClient) throw new Error('Database security service unavailable. Please check your internet connection.');
 
     // Always redirect to production domain so Chrome catches the callback and hands it to the native app!
-    const redirectUrl = 'https://gym-management-one-beige.vercel.app';
+    const redirectUrl = 'com.wolisogym.app://';
     const { data, error } = await supabaseClient.auth.signInWithOAuth({
       provider: 'google',
       options: {
