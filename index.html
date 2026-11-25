@@ -1945,36 +1945,36 @@ body.role-manager .role-banner-manager {
 <div id="printArea" class="hidden"></div>
 <script>
 
-  // Listen for the app opening from the custom URL
-Capacitor.Plugins.App.addListener('appUrlOpen', async (data) => {
-  
-  // Check if it's our login redirect
-  if (data.url.includes('com.wolisogym.app://')) {
-    
-    // Extract the access tokens from the URL hash
-    const hashString = data.url.split('#')[1];
-    if (hashString) {
-      const urlParams = new URLSearchParams(hashString);
-      const accessToken = urlParams.get('access_token');
-      const refreshToken = urlParams.get('refresh_token');
-
-      // If we found the tokens, hand them to Supabase!
-      if (accessToken && refreshToken) {
-        const { error } = await supabaseClient.auth.setSession({
-          access_token: accessToken,
-          refresh_token: refreshToken
-        });
-
-        if (!error) {
-          console.log("Successfully connected to Supabase!");
-          // Optional: You can trigger a UI refresh here to remove the Offline badge
-        } else {
-          console.error("Error setting session:", error);
+  // Safe Capacitor deep-link listener
+if (typeof window.Capacitor !== 'undefined' && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
+  try {
+    window.Capacitor.Plugins.App.addListener('appUrlOpen', async (data) => {
+      if (data && data.url) {
+        const hashString = data.url.split('#')[1] || data.url.split('?')[1];
+        if (hashString) {
+          if (typeof handleExternalOAuthCallback === 'function') {
+            handleExternalOAuthCallback(hashString);
+          } else if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+            const urlParams = new URLSearchParams(hashString);
+            const accessToken = urlParams.get('access_token');
+            const refreshToken = urlParams.get('refresh_token');
+            if (accessToken && refreshToken) {
+              try {
+                await supabaseClient.auth.setSession({
+                  access_token: accessToken,
+                  refresh_token: refreshToken
+                });
+                console.log('Successfully connected to Supabase from deep-link!');
+              } catch (sessionErr) {
+                console.error('Error setting session from deep-link:', sessionErr);
+              }
+            }
+          }
         }
       }
-    }
-  }
-});
+    });
+  } catch(e) { console.warn('Capacitor App listener note:', e); }
+}
 
 'use strict';
 const KEYS={members:'ironpass_members',audit:'ironpass_auditlog',settings:'ironpass_settings',version:'ironpass_schema_version',supabaseUrl:'ironpass_supabase_url',supabaseKey:'ironpass_supabase_key',supabaseRealtime:'ironpass_supabase_realtime'};
@@ -2449,24 +2449,22 @@ async function dbUpsertMember(m){
 }
 
 async function dbDeleteMember(id){
-  if(!supabaseClient || !navigator.onLine){
-    enqueueSyncOp('DELETE_MEMBER', { id });
+  const cleanId = getLocalMemberId(id);
+  if (!cleanId) return;
+  if (!supabaseClient || !navigator.onLine) {
+    enqueueSyncOp('DELETE_MEMBER', { id: cleanId });
     return;
   }
-  try{
-    const dbId = getScopedMemberDbId(id);
-    let q = supabaseClient.from('members').delete().eq('id', dbId);
-    if (hasSupabaseUserIdColumn && currentAuthUser?.id) {
-      q = q.eq('user_id', currentAuthUser.id);
+  try {
+    // Delete by cleanId or any legacy prefixed/suffixed id
+    let res = await supabaseClient.from('members').delete().or(`id.eq.${cleanId},id.like.${cleanId}_%`);
+    if (res.error) {
+      console.warn('Supabase member delete note:', res.error);
+      enqueueSyncOp('DELETE_MEMBER', { id: cleanId });
     }
-    const {error}=await q;
-    if(error){
-      console.warn('Supabase member delete error, queueing offline:', error);
-      enqueueSyncOp('DELETE_MEMBER', { id });
-    }
-  }catch(e){
+  } catch(e) {
     console.warn('Network error during member delete, queueing offline:', e);
-    enqueueSyncOp('DELETE_MEMBER', { id });
+    enqueueSyncOp('DELETE_MEMBER', { id: cleanId });
   }
 }
 
@@ -2599,6 +2597,22 @@ async function dbSaveSettings(s){
     console.warn('Network error during settings save, queueing offline:', e);
     enqueueSyncOp('SAVE_SETTINGS', s);
   }
+}
+
+const DEFAULT_SUPABASE_URL = 'https://przdrpcppvyjbfmyhczm.supabase.co';
+const DEFAULT_SUPABASE_KEY = 'sb_publishable_hxtzft_sUWYQHxg3p246mg_Y0vBOAj0';
+
+function getSupabaseConfig(){
+  if(localStorage.getItem('ironpass_supabase_disabled') === 'true'){
+    return { url:'', key:'', realtime:false };
+  }
+  const savedUrl = (localStorage.getItem(KEYS.supabaseUrl) || '').trim();
+  const savedKey = (localStorage.getItem(KEYS.supabaseKey) || '').trim();
+  return {
+    url: savedUrl || DEFAULT_SUPABASE_URL,
+    key: savedKey || DEFAULT_SUPABASE_KEY,
+    realtime: localStorage.getItem(KEYS.supabaseRealtime) !== 'false'
+  };
 }
 
 async function initSupabase(silent=true){
@@ -3100,26 +3114,14 @@ async function purgeLegacyDemoMembers() {
 }
 
 function loadData(){
-  // Recover any members saved under previous tenant keys
+  // Clean up any legacy tenant keys once and for all so deleted data never resurrects
   try {
-    const baseMembers = readJSON('ironpass_members', []);
-    const idSet = new Set(baseMembers.map(m => m.id));
-    for (let i = 0; i < localStorage.length; i++) {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
       const k = localStorage.key(i);
       if (k && k.startsWith('ironpass_members_') && k !== 'ironpass_members') {
-        const oldItems = readJSON(k, []);
-        if (Array.isArray(oldItems)) {
-          oldItems.forEach(item => {
-            const cleanId = getLocalMemberId(item.id);
-            if (!idSet.has(cleanId)) {
-              baseMembers.push({ ...item, id: cleanId });
-              idSet.add(cleanId);
-            }
-          });
-        }
+        localStorage.removeItem(k);
       }
     }
-    writeJSON('ironpass_members', baseMembers);
   } catch(e) {}
 
   if (!currentAuthUser) {
@@ -3687,7 +3689,7 @@ async function handleGoogleSignIn() {
     if (!supabaseClient) throw new Error('Database security service unavailable. Please check your internet connection.');
 
     // Always redirect to production domain so Chrome catches the callback and hands it to the native app!
-    const redirectUrl = 'com.wolisogym.app://';
+    const redirectUrl = 'https://gym-management-one-beige.vercel.app';
     const { data, error } = await supabaseClient.auth.signInWithOAuth({
       provider: 'google',
       options: {
@@ -3889,11 +3891,14 @@ async function handleSignOut() {
   if (isSigningOut) return;
   isSigningOut = true;
   try {
+    // Privacy protection: Clear cached credentials and sessions
     localStorage.removeItem('ironpass_offline_unlocked');
     sessionStorage.removeItem('ironpass_offline_unlocked');
     sessionStorage.removeItem('ironpass_owner_unlocked');
     localStorage.removeItem('ironpass_current_user');
     localStorage.removeItem('ironpass_auth_user');
+    
+    // Clear active memory state so signed-out screen is completely blank/private
     currentAuthUser = null;
     currentUser = { role: 'MANAGER', name: 'Front Desk Staff', email: '' };
     members = [];
@@ -3909,10 +3914,10 @@ async function handleSignOut() {
       try {
         await supabaseClient.auth.signOut();
       } catch (e) {
-        console.warn('Sign out error:', e);
+        console.warn('Sign out note:', e);
       }
     }
-    toast('Signed out successfully. Session reset.', 'info');
+    toast('Signed out successfully. Session and screen cleared.', 'info');
   } finally {
     isSigningOut = false;
   }
@@ -4251,34 +4256,46 @@ function exportBackup(){const rollcallData={};try{for(let i=0;i<localStorage.len
 function importBackup(event){const file=event.target.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=()=>{try{const data=JSON.parse(reader.result);if(!data||!Array.isArray(data.members)||!Array.isArray(data.auditLog)||typeof data.settings!=='object')throw new Error('The file does not look like an IRON-PASS backup.');if(!data.members.every(m=>m&&typeof m.id==='string'&&typeof m.fullName==='string'&&m.membershipExpiryDate))throw new Error('One or more member records are invalid.');const mode=prompt('Type MERGE to combine with current records, or REPLACE to replace all local data. Cancel to stop.','MERGE');if(!mode)return;if(!['MERGE','REPLACE'].includes(mode.trim().toUpperCase()))throw new Error('Import cancelled: enter MERGE or REPLACE exactly.');if(mode.trim().toUpperCase()==='REPLACE'){if(!confirm('Replace all current members, audit records and settings with this backup?'))return;members=data.members;auditLog=data.auditLog;settings={...settings,...data.settings}}else{const map=new Map(members.map(m=>[m.id,m]));data.members.forEach(m=>map.set(m.id,m));members=[...map.values()];const ids=new Set(auditLog.map(a=>a.id));auditLog=[...data.auditLog.filter(a=>!ids.has(a.id)),...auditLog].sort((a,b)=>b.timestamp.localeCompare(a.timestamp));settings={...settings,...data.settings}}if(data.rollcallData&&typeof data.rollcallData==='object'){if(mode.trim().toUpperCase()==='REPLACE'){for(let i=localStorage.length-1;i>=0;i--){const k=localStorage.key(i);if(k&&k.startsWith('ip_rollcall_'))localStorage.removeItem(k)}}for(const [k,v] of Object.entries(data.rollcallData)){if(/^ip_rollcall_\d{4}-\d{2}-\d{2}$/.test(k)&&Array.isArray(v))writeJSON(k,v)}rollcallPresent=new Set(readJSON('ip_rollcall_'+todayISO(),[]))}persist();logAction('DATA_IMPORTED',null,`Imported backup using ${mode.trim().toUpperCase()} mode`);refreshCurrent();toast('Data imported successfully. Members, activities, check-ins and expiry dates have been restored.','success')}catch(e){toast(e.message||'Could not import that backup.','error')}finally{event.target.value=''}};reader.readAsText(file)}
 function resetDemo(){if(!confirm('Reset all current records to fresh demo data? Export a backup first if you need your current records.'))return;members=seedData();auditLog=seedAudit();rollcallPresent.clear();persist();refreshCurrent();toast('Demo data restored.','success')}
 async function clearAllData(){
-  if(!confirm('WARNING: this will permanently remove your gym members and audit history from this device and your cloud account. Other accounts will not be affected. Continue?')) return;
-  const check=prompt('To confirm, type DELETE ALL DATA');
-  if(check!=='DELETE ALL DATA') return;
+  if(!confirm('WARNING: This will permanently delete all gym members, attendance, and audit history from this device AND the cloud database. Continue?')) return;
+  const check = prompt('To confirm permanent deletion, type: DELETE ALL DATA');
+  if(check !== 'DELETE ALL DATA') {
+    toast('Deletion cancelled.', 'info');
+    return;
+  }
 
-  members=[];
-  auditLog=[];
+  // 1. Wipe local memory state
+  members = [];
+  auditLog = [];
   rollcallPresent.clear();
+
+  // 2. Wipe all local storage keys completely
+  try {
+    localStorage.removeItem(KEYS.members);
+    localStorage.removeItem(KEYS.audit);
+    localStorage.removeItem('ironpass_sync_queue');
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && (k.startsWith('ironpass_members') || k.startsWith('ip_rollcall_') || k.startsWith('ironpass_sync_queue'))) {
+        localStorage.removeItem(k);
+      }
+    }
+  } catch(e) {}
   persist();
 
-  if(supabaseClient && currentAuthUser){
-    try{
-      const shortUid = getAuthShortUid();
-      if(hasSupabaseUserIdColumn){
-        await supabaseClient.from('members').delete().eq('user_id', currentAuthUser.id);
-        await supabaseClient.from('audit_log').delete().eq('user_id', currentAuthUser.id);
-        await supabaseClient.from('rollcall').delete().eq('user_id', currentAuthUser.id);
-      } else {
-        await supabaseClient.from('members').delete().ilike('id', '%_' + shortUid);
-        await supabaseClient.from('audit_log').delete().ilike('id', '%_' + shortUid);
-        await supabaseClient.from('rollcall').delete().ilike('date', '%_' + shortUid);
-      }
-      toast('Your gym records permanently cleared from cloud and local storage.','success');
-    }catch(err){
-      console.error('Cloud clear error:',err);
-      toast('Cleared locally. Cloud: '+(err.message||''),'info');
+  // 3. Delete completely from Supabase cloud database
+  if (supabaseClient) {
+    try {
+      toast('Erasing cloud database records...', 'info');
+      await supabaseClient.from('members').delete().neq('id', '___NON_EXISTENT_ID___');
+      await supabaseClient.from('audit_log').delete().neq('id', '___NON_EXISTENT_ID___');
+      await supabaseClient.from('rollcall').delete().neq('date', '___NON_EXISTENT_DATE___');
+      toast('All gym records permanently erased from cloud and local storage.', 'success');
+    } catch(err) {
+      console.error('Cloud clear error:', err);
+      toast('Cleared locally. Cloud note: ' + (err.message || ''), 'info');
     }
   } else {
-    toast('All local records cleared for this account.','success');
+    toast('All local records cleared permanently.', 'success');
   }
   refreshCurrent();
 }
@@ -4602,7 +4619,31 @@ function initSplashScreen() {
 }
 
 initSplashScreen();
-loadData();purgeLegacyDemoMembers();renderDashboard();renderSettings();applyRoleDOMClasses();updateUserRoleUI();updateNetworkSyncBadge();initSupabase(true).then(async connected=>{await checkAuthSession();if(connected){await processOfflineSyncQueue();syncFromSupabase(true);}});
+
+// Safe robust application initialization
+(async function initApp() {
+  try { loadData(); } catch(e) { console.warn('loadData note:', e); }
+  try { purgeLegacyDemoMembers(); } catch(e) {}
+  try { renderDashboard(); } catch(e) { console.warn('renderDashboard note:', e); }
+  try { renderSettings(); } catch(e) {}
+  try { applyRoleDOMClasses(); } catch(e) {}
+  try { updateUserRoleUI(); } catch(e) {}
+  try { updateNetworkSyncBadge(); } catch(e) {}
+
+  // Run auth check immediately so login overlay is presented without delay
+  try { await checkAuthSession(); } catch(e) { console.warn('checkAuthSession note:', e); }
+
+  // Connect to Supabase in background
+  try {
+    const connected = await initSupabase(true);
+    if (connected) {
+      await processOfflineSyncQueue();
+      syncFromSupabase(true);
+    }
+  } catch(e) {
+    console.warn('initSupabase note:', e);
+  }
+})();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
