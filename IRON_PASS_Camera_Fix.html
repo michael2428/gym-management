@@ -1621,7 +1621,17 @@ body.role-manager .role-banner-manager {
     <div><label class="field-label" for="statusFilter">Status</label><select id="statusFilter" class="field" onchange="renderMembers()"><option value="">All statuses</option><option value="ACTIVE">Active</option><option value="EXPIRING">Expiring soon</option><option value="EXPIRED">Expired</option></select></div>
     <div><label class="field-label" for="sortMembers">Sort by</label><select id="sortMembers" class="field" onchange="renderMembers()"><option value="name">Name A–Z</option><option value="expiry">Expiry date</option><option value="joined">Join date</option></select></div>
   </div>
-  <div class="card overflow-hidden"><div class="p-4 flex justify-between items-center gap-3"><span id="memberCount" class="text-xs text-stone-500"></span><div class="flex gap-2"><button class="btn btn-light btn-sm" onclick="exportBackup()"><i class="fa-solid fa-download"></i> Download Data</button></div></div><div id="membersTable" class="table-wrap"></div><div class="p-4 flex justify-between items-center border-t border-[#eeeae1]"><span id="pageLabel" class="text-xs text-stone-500"></span><div class="flex gap-2"><button class="btn btn-light btn-sm" id="prevPage" onclick="changePage(-1)">Previous</button><button class="btn btn-light btn-sm" id="nextPage" onclick="changePage(1)">Next</button></div></div></div>
+  <div class="card overflow-hidden">
+    <div id="membersToolbar" class="p-4 flex flex-wrap justify-between items-center gap-3 border-b border-[#eeeae1] bg-[#faf9f6]">
+      <div class="flex items-center gap-2">
+        <span id="memberCount" class="text-xs text-stone-600 font-semibold"></span>
+        <span id="memberSelectedBadge" class="hidden text-xs bg-[#8b6a27] text-white px-2 py-0.5 rounded-full font-bold"></span>
+      </div>
+      <div id="memberBulkActions" class="flex flex-wrap items-center gap-2">
+        <button class="btn btn-light btn-sm" onclick="exportBackup()"><i class="fa-solid fa-download"></i> Backup</button>
+      </div>
+    </div>
+    <div id="membersTable" class="table-wrap"></div><div class="p-4 flex justify-between items-center border-t border-[#eeeae1]"><span id="pageLabel" class="text-xs text-stone-500"></span><div class="flex gap-2"><button class="btn btn-light btn-sm" id="prevPage" onclick="changePage(-1)">Previous</button><button class="btn btn-light btn-sm" id="nextPage" onclick="changePage(1)">Next</button></div></div></div>
 </section>
 <section id="view-audit" class="view">
   <div class="mb-6"><div class="eyebrow mb-2">Accountability / entry history</div><h1 class="text-3xl font-extrabold tracking-tight">Activity & Audit Log</h1><p class="text-sm text-stone-500 mt-2">A timestamped record of scans, renewals, roll calls and record changes.</p></div>
@@ -3186,16 +3196,93 @@ function memberCard(m){
   </article>`;
 }
 function getFilteredMembers(){const q=($('memberSearch')?.value||'').trim().toLowerCase(),cat=$('categoryFilter')?.value||'',status=$('statusFilter')?.value||'',sort=$('sortMembers')?.value||'name';let list=members.filter(m=>(!cat||m.category===cat)&&(!status||statusOf(m)===status)&&(!q||[m.fullName,m.id,m.phone].some(v=>String(v||'').toLowerCase().includes(q))));list.sort((a,b)=>sort==='expiry'?a.membershipExpiryDate.localeCompare(b.membershipExpiryDate):sort==='joined'?b.membershipStartDate.localeCompare(a.membershipStartDate):a.fullName.localeCompare(b.fullName));return list}
+let selectedMemberIds = new Set();
+
+function toggleSelectMember(id, checked) {
+  if (checked) selectedMemberIds.add(id);
+  else selectedMemberIds.delete(id);
+  renderMembers();
+}
+
+function toggleSelectAllMembers(checked) {
+  const list = getFilteredMembers();
+  const pages = Math.max(1, Math.ceil(list.length / pageSize));
+  const pageIndex = Math.min(memberPage, pages);
+  const shown = list.slice((pageIndex - 1) * pageSize, pageIndex * pageSize);
+  shown.forEach(m => {
+    if (checked) selectedMemberIds.add(m.id);
+    else selectedMemberIds.delete(m.id);
+  });
+  renderMembers();
+}
+
+function selectExpiredMembers() {
+  const expired = members.filter(m => statusOf(m) === 'EXPIRED');
+  if (expired.length === 0) {
+    toast('No expired members found in the gym roster.', 'info');
+    return;
+  }
+  expired.forEach(m => selectedMemberIds.add(m.id));
+  renderMembers();
+  toast(`Selected ${expired.length} expired member${expired.length === 1 ? '' : 's'}.`, 'success');
+}
+
+function clearMemberSelection() {
+  selectedMemberIds.clear();
+  renderMembers();
+}
+
 function renderMembers(){
   const list=getFilteredMembers(),pages=Math.max(1,Math.ceil(list.length/pageSize));
   memberPage=Math.min(memberPage,pages);
   const shown=list.slice((memberPage-1)*pageSize,memberPage*pageSize);
+
   $('memberCount').textContent=`${list.length} member${list.length===1?'':'s'} found`;
+  const badge = $('memberSelectedBadge');
+  if (badge) {
+    if (selectedMemberIds.size > 0) {
+      badge.textContent = `${selectedMemberIds.size} selected`;
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
+  }
+
+  const bulkContainer = $('memberBulkActions');
+  if (bulkContainer) {
+    if (isOwner()) {
+      bulkContainer.innerHTML = `
+        <button class="btn btn-light btn-sm" onclick="selectExpiredMembers()" title="Select all expired members in roster">
+          <i class="fa-solid fa-clock-rotate-left text-red-600 mr-1"></i> Select Expired
+        </button>
+        <button class="btn ${selectedMemberIds.size > 0 ? 'btn-gold shadow-sm' : 'btn-light opacity-60'} btn-sm" onclick="openBulkRenewModal()" ${selectedMemberIds.size === 0 ? 'disabled' : ''} title="Renew all selected members at once">
+          <i class="fa-solid fa-arrows-rotate mr-1"></i> Bulk Renew (${selectedMemberIds.size})
+        </button>
+        ${selectedMemberIds.size > 0 ? `<button class="btn btn-light btn-sm" onclick="clearMemberSelection()"><i class="fa-solid fa-xmark mr-1"></i> Clear</button>` : ''}
+        <button class="btn btn-light btn-sm" onclick="exportBackup()"><i class="fa-solid fa-download"></i> Backup</button>
+      `;
+    } else {
+      bulkContainer.innerHTML = `<button class="btn btn-light btn-sm" onclick="exportBackup()"><i class="fa-solid fa-download"></i> Backup</button>`;
+    }
+  }
+
   $('pageLabel').textContent=`Page ${memberPage} of ${pages}`;
   $('prevPage').disabled=memberPage<=1;
   $('nextPage').disabled=memberPage>=pages;
 
-  $('membersTable').innerHTML=shown.length?`<table><thead><tr><th>Member</th><th>Category</th><th>Membership</th><th>Expiry</th>${isOwner()?'<th>Monthly fee</th>':''}<th>Actions</th></tr></thead><tbody>${shown.map(m=>{
+  const allPageSelected = shown.length > 0 && shown.every(m => selectedMemberIds.has(m.id));
+
+  $('membersTable').innerHTML=shown.length?`<table><thead><tr>
+    <th style="width: 44px; text-align: center;">
+      <input type="checkbox" id="selectAllChkBx" ${allPageSelected ? 'checked' : ''} onchange="toggleSelectAllMembers(this.checked)" title="Select all on this page" class="cursor-pointer" style="width: 16px; height: 16px; accent-color: #8b6a27;">
+    </th>
+    <th>Member</th>
+    <th>Category</th>
+    <th>Membership</th>
+    <th>Expiry</th>
+    ${isOwner()?'<th>Monthly fee</th>':''}
+    <th>Actions</th>
+  </tr></thead><tbody>${shown.map(m=>{
     const actionsHtml = isOwner()
       ? `<div class="flex gap-1">
           <button class="btn btn-light btn-sm" title="View Profile" onclick="viewMember('${m.id}')"><i class="fa-regular fa-eye"></i></button>
@@ -3209,7 +3296,12 @@ function renderMembers(){
           <button class="btn btn-light btn-sm" title="Show QR Pass" onclick="showPass('${m.id}')"><i class="fa-solid fa-qrcode mr-1"></i> Pass</button>
         </div>`;
 
-    return `<tr>
+    const isChecked = selectedMemberIds.has(m.id);
+
+    return `<tr class="${isChecked ? 'bg-[#faf6ee]' : ''}">
+      <td style="text-align: center;">
+        <input type="checkbox" class="cursor-pointer member-select-chk" value="${m.id}" ${isChecked ? 'checked' : ''} onchange="toggleSelectMember('${m.id}', this.checked)" style="width: 16px; height: 16px; accent-color: #8b6a27;">
+      </td>
       <td>
         <div class="flex items-center gap-3 min-w-[190px]">
           <img loading="lazy" decoding="async" class="member-avatar" src="${m.photo||avatarData(m.fullName)}" alt="${esc(m.fullName)}">
@@ -3233,6 +3325,138 @@ function renderMembers(){
     </tr>`;
   }).join('')}</tbody></table>`:`<div class="empty-state"><i class="fa-solid fa-magnifying-glass block"></i><div class="font-bold text-stone-700">No matching members</div><p class="text-sm mt-1">Try changing the search or filters.</p></div>`;
 }
+
+function openBulkRenewModal() {
+  if (!isOwner()) {
+    toast('Access Denied: Only the Gym Owner has permission to renew memberships in bulk.', 'error');
+    return;
+  }
+  const targets = members.filter(m => selectedMemberIds.has(m.id));
+  if (targets.length === 0) {
+    toast('Please select at least one member to renew.', 'info');
+    return;
+  }
+
+  const namesList = targets.slice(0, 6).map(m => esc(m.fullName)).join(', ') + (targets.length > 6 ? ` and ${targets.length - 6} more...` : '');
+
+  const body = `<div class="space-y-4">
+    <div class="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-3">
+      <i class="fa-solid fa-users text-amber-700 text-lg mt-0.5"></i>
+      <div>
+        <div class="font-bold text-sm">Bulk Renewing ${targets.length} Selected Member${targets.length === 1 ? '' : 's'}</div>
+        <div class="mt-1 text-stone-600">${namesList}</div>
+      </div>
+    </div>
+    <form id="bulkRenewForm" onsubmit="submitBulkRenew(event)" class="space-y-4">
+      <div>
+        <label class="field-label font-bold text-stone-700">Extension Duration</label>
+        <select class="field font-semibold" name="days" id="bulkRenewDays">
+          <option value="30" selected>30 days (1 Month)</option>
+          <option value="60">60 days (2 Months)</option>
+          <option value="90">90 days (3 Months)</option>
+          <option value="180">180 days (6 Months)</option>
+          <option value="365">365 days (1 Full Year)</option>
+        </select>
+      </div>
+      <div>
+        <label class="field-label font-bold text-stone-700">Extend Starting From</label>
+        <div class="space-y-2.5 text-sm mt-2">
+          <label class="flex items-center gap-2 cursor-pointer p-2.5 rounded-lg border border-[#eeeae1] hover:bg-[#faf8f2]">
+            <input type="radio" name="base" value="today" checked style="accent-color: #8b6a27;">
+            <div>
+              <div class="font-bold">Today (${fmtDate(todayISO())})</div>
+              <div class="text-[11px] text-stone-500">Recommended when renewing expired members</div>
+            </div>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer p-2.5 rounded-lg border border-[#eeeae1] hover:bg-[#faf8f2]">
+            <input type="radio" name="base" value="smart" style="accent-color: #8b6a27;">
+            <div>
+              <div class="font-bold">Smart Extend</div>
+              <div class="text-[11px] text-stone-500">From today if expired, or extends from current expiry if active</div>
+            </div>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer p-2.5 rounded-lg border border-[#eeeae1] hover:bg-[#faf8f2]">
+            <input type="radio" name="base" value="expiry" style="accent-color: #8b6a27;">
+            <div>
+              <div class="font-bold">From Current Expiry Date</div>
+              <div class="text-[11px] text-stone-500">Adds days directly to the existing expiration date</div>
+            </div>
+          </label>
+        </div>
+      </div>
+      <div class="text-xs text-stone-500 rounded-xl bg-[#faf8f2] p-3 border border-[#eeeae1]">
+        <i class="fa-solid fa-cloud-arrow-up mr-1 text-[#8b6a27]"></i>
+        All selected members will update immediately on this device and sync to Supabase Cloud, so the front-desk scanner recognizes their active status.
+      </div>
+    </form>
+  </div>`;
+
+  openModal(`Bulk Renew (${targets.length} Members)`, body, `
+    <button class="btn btn-light" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-gold" type="submit" form="bulkRenewForm">
+      <i class="fa-solid fa-arrows-rotate mr-1"></i> Confirm Renewal (${targets.length})
+    </button>
+  `);
+}
+
+async function submitBulkRenew(event) {
+  event.preventDefault();
+  if (!isOwner()) {
+    toast('Access Denied: Only the Gym Owner has permission to renew memberships.', 'error');
+    return;
+  }
+  const targets = members.filter(m => selectedMemberIds.has(m.id));
+  if (targets.length === 0) return;
+
+  const fd = new FormData(event.target);
+  const days = Number(fd.get('days') || 30);
+  const baseMode = fd.get('base') || 'today';
+
+  let count = 0;
+  const updatedMembers = [];
+
+  targets.forEach(m => {
+    let baseDate;
+    if (baseMode === 'today') {
+      baseDate = new Date(todayISO() + 'T00:00:00');
+    } else if (baseMode === 'smart') {
+      baseDate = (m.membershipExpiryDate && m.membershipExpiryDate > todayISO()) 
+        ? new Date(m.membershipExpiryDate + 'T00:00:00')
+        : new Date(todayISO() + 'T00:00:00');
+    } else {
+      baseDate = m.membershipExpiryDate ? new Date(m.membershipExpiryDate + 'T00:00:00') : new Date(todayISO() + 'T00:00:00');
+    }
+
+    baseDate.setDate(baseDate.getDate() + days);
+    const newExpiry = `${baseDate.getFullYear()}-${String(baseDate.getMonth() + 1).padStart(2, '0')}-${String(baseDate.getDate()).padStart(2, '0')}`;
+    m.membershipExpiryDate = newExpiry;
+    logAction('MEMBER_RENEWED', m, `Bulk membership renewal for ${days} days; new expiry ${newExpiry}`);
+    dbUpdateMemberRenewal(m.id, newExpiry);
+    updatedMembers.push(m);
+    count++;
+  });
+
+  persist();
+  closeModal();
+
+  // Push all updated rows to Supabase Cloud
+  if (supabaseClient && navigator.onLine) {
+    try {
+      const rows = updatedMembers.map(memberToRow);
+      supabaseClient.from('members').upsert(rows, { onConflict: 'id' }).then(({ error }) => {
+        if (!error) console.log('Bulk renewals successfully upserted to Supabase!');
+        else console.warn('Bulk renewal upsert note:', error);
+      });
+    } catch (e) {
+      console.warn('Bulk renewal cloud sync note:', e);
+    }
+  }
+
+  selectedMemberIds.clear();
+  refreshCurrent();
+  toast(`Successfully renewed ${count} member${count === 1 ? '' : 's'} for ${days} days!`, 'success');
+}
+
 function changePage(n){memberPage+=n;renderMembers()}
 
 function exportMembersCSV(){
