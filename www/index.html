@@ -2474,12 +2474,8 @@ async function dbUpdateMemberCheckin(id,timestamp){
     return;
   }
   try{
-    const dbId = getScopedMemberDbId(id);
-    let q = supabaseClient.from('members').update({last_check_in:timestamp}).eq('id', dbId);
-    if (hasSupabaseUserIdColumn && currentAuthUser?.id) {
-      q = q.eq('user_id', currentAuthUser.id);
-    }
-    const {error}=await q;
+    const cleanId = getLocalMemberId(id);
+    const { error } = await supabaseClient.from('members').update({last_check_in:timestamp}).eq('id', cleanId);
     if(error){
       console.warn('Supabase checkin update error, queueing offline:', error);
       enqueueSyncOp('CHECKIN_MEMBER', { id, timestamp });
@@ -2496,12 +2492,8 @@ async function dbUpdateMemberRenewal(id,expiryDate){
     return;
   }
   try{
-    const dbId = getScopedMemberDbId(id);
-    let q = supabaseClient.from('members').update({membership_expiry_date:expiryDate}).eq('id', dbId);
-    if (hasSupabaseUserIdColumn && currentAuthUser?.id) {
-      q = q.eq('user_id', currentAuthUser.id);
-    }
-    const {error}=await q;
+    const cleanId = getLocalMemberId(id);
+    const { error } = await supabaseClient.from('members').update({membership_expiry_date:expiryDate}).eq('id', cleanId);
     if(error){
       console.warn('Supabase renewal update error, queueing offline:', error);
       enqueueSyncOp('RENEW_MEMBER', { id, expiryDate });
@@ -2797,12 +2789,15 @@ async function syncFromSupabase(silent=false){
       if (!lm) {
         localMap.set(cm.id, cm);
       } else {
+        // Cloud is single source of truth for membership status & expiry, unless an unpushed local renewal exists
+        const hasPendingLocalRenewal = syncQueue.some(op => op.type === 'RENEW_MEMBER' && getLocalMemberId(op.payload.id) === cm.id);
+        const resolvedExpiry = hasPendingLocalRenewal ? lm.membershipExpiryDate : (cm.membershipExpiryDate || lm.membershipExpiryDate);
         const merged = {
-          ...cm,
           ...lm,
-          photo: lm.photo || cm.photo,
-          lastCheckIn: (lm.lastCheckIn && (!cm.lastCheckIn || lm.lastCheckIn > cm.lastCheckIn)) ? lm.lastCheckIn : (cm.lastCheckIn || lm.lastCheckIn),
-          membershipExpiryDate: (lm.membershipExpiryDate && (!cm.membershipExpiryDate || lm.membershipExpiryDate > cm.membershipExpiryDate)) ? lm.membershipExpiryDate : (cm.membershipExpiryDate || lm.membershipExpiryDate)
+          ...cm, // Cloud fields overwrite stale local fields
+          photo: cm.photo || lm.photo,
+          membershipExpiryDate: resolvedExpiry,
+          lastCheckIn: (lm.lastCheckIn && (!cm.lastCheckIn || lm.lastCheckIn > cm.lastCheckIn)) ? lm.lastCheckIn : (cm.lastCheckIn || lm.lastCheckIn)
         };
         localMap.set(cm.id, merged);
       }
@@ -3301,7 +3296,26 @@ function viewMember(id){const m=members.find(x=>x.id===id||x.dbId===id);if(!m)re
 openModal('Member Profile',body,footBtns)}
 function detail(k,v){return `<div><div class="text-[10px] uppercase tracking-wider font-bold text-stone-400">${esc(k)}</div><div class="text-sm font-semibold mt-1 break-words">${esc(v)}</div></div>`}
 function openRenewModal(id){if(!isOwner()){toast('Access Denied: Only the Gym Owner has permission to renew memberships and collect fees.','error');return;}const m=members.find(x=>x.id===id||x.dbId===id);if(!m)return;const body=`<div class="flex items-center gap-3 mb-5"><img src="${m.photo||avatarData(m.fullName)}" class="member-avatar" alt=""><div><div class="font-bold">${esc(m.fullName)}</div><div class="text-xs text-stone-500">${esc(m.id)} · Current expiry ${fmtDate(m.membershipExpiryDate)}</div></div></div><form id="renewForm" onsubmit="renewMember(event,'${m.id}')" class="space-y-4"><div><label class="field-label">Extension plan</label><select class="field" name="days"><option value="30">30 days</option><option value="60">60 days</option><option value="90">90 days</option><option value="180">180 days</option><option value="365">365 days</option></select></div><div><label class="field-label">Extend from</label><div class="space-y-2 text-sm"><label class="flex items-center gap-2"><input type="radio" name="base" value="today" checked> Today (${fmtDate(todayISO())})</label><label class="flex items-center gap-2"><input type="radio" name="base" value="expiry"> Current expiry (${fmtDate(m.membershipExpiryDate)})</label></div></div><div class="text-xs text-stone-500 rounded-xl bg-[#faf8f2] p-3">New expiry date is calculated automatically. The member's status updates immediately.</div></form>`;openModal('Renew Membership',body,`<button class="btn btn-light" onclick="closeModal()">Cancel</button><button class="btn btn-gold" type="submit" form="renewForm"><i class="fa-solid fa-arrows-rotate"></i> Confirm Renewal</button>`)}
-function renewMember(event,id){event.preventDefault();if(!isOwner()){toast('Access Denied: Only the Gym Owner has permission to renew memberships.','error');return;}const m=members.find(x=>x.id===id||x.dbId===id);if(!m)return;const fd=new FormData(event.target),days=Number(fd.get('days')),base=fd.get('base')==='expiry'&&m.membershipExpiryDate>todayISO()?new Date(m.membershipExpiryDate+'T00:00:00'):new Date(todayISO()+'T00:00:00');base.setDate(base.getDate()+days);m.membershipExpiryDate=`${base.getFullYear()}-${String(base.getMonth()+1).padStart(2,'0')}-${String(base.getDate()).padStart(2,'0')}`;logAction('MEMBER_RENEWED',m,`Membership renewed for ${days} days; new expiry ${m.membershipExpiryDate}`);persist();dbUpdateMemberRenewal(id,m.membershipExpiryDate);closeModal();refreshCurrent();toast(`Membership renewed through ${fmtDate(m.membershipExpiryDate)}.`,'success')}
+function renewMember(event,id){
+  event.preventDefault();
+  if(!isOwner()){
+    toast('Access Denied: Only the Gym Owner has permission to renew memberships.','error');
+    return;
+  }
+  const m=members.find(x=>x.id===id||x.dbId===id);
+  if(!m)return;
+  const fd=new FormData(event.target),days=Number(fd.get('days')),base=fd.get('base')==='expiry'&&m.membershipExpiryDate>todayISO()?new Date(m.membershipExpiryDate+'T00:00:00'):new Date(todayISO()+'T00:00:00');
+  base.setDate(base.getDate()+days);
+  m.membershipExpiryDate=`${base.getFullYear()}-${String(base.getMonth()+1).padStart(2,'0')}-${String(base.getDate()).padStart(2,'0')}`;
+  logAction('MEMBER_RENEWED',m,`Membership renewed for ${days} days; new expiry ${m.membershipExpiryDate}`);
+  persist();
+  dbUpdateMemberRenewal(id,m.membershipExpiryDate);
+  dbUpsertMember(m);
+  closeModal();
+  refreshCurrent();
+  toast(`Membership renewed through ${fmtDate(m.membershipExpiryDate)} (+${days} days).`,'success');
+}
+
 function showPass(id){const m=members.find(x=>x.id===id);if(!m)return;const body=`<div class="flex flex-col items-center gap-4"><div class="pass-card" id="passCard"><div class="flex justify-between items-start relative"><div><div class="pass-brand"><i class="fa-solid fa-shield-halved mr-1"></i> WOLISO GYM &amp; ITF</div><div class="text-[9px] uppercase tracking-[.17em] text-stone-500 mt-1">Elite club membership</div></div><div class="text-[9px] font-extrabold tracking-widest text-[#9a7836]">${m.category}</div></div><div class="flex gap-3 items-center mt-6 relative"><img src="${m.photo||avatarData(m.fullName)}" class="pass-photo" alt="${esc(m.fullName)}"><div class="min-w-0"><div class="text-lg font-extrabold leading-tight">${esc(m.fullName)}</div><div class="text-xs text-stone-500 mt-1">${esc(m.id)}</div><div class="text-[10px] font-bold text-[#8c6a27] mt-2">${m.category==='ITF'?esc(m.beltRank||'ITF STUDENT'):'GENERAL GYM'}</div></div></div><div class="flex items-end justify-between mt-5 pt-4 border-t border-[#e9dfc8] relative"><div><div class="text-[9px] uppercase tracking-widest text-stone-400">Valid through</div><div class="text-xs font-extrabold mt-1">${fmtDate(m.membershipExpiryDate)}</div><div class="mt-2">${statusBadge(m)}</div></div><div id="passQr" class="qr-box"></div></div><div class="text-[8px] text-stone-400 tracking-widest mt-4 relative">PRESENT THIS PASS AT THE FRONT DESK</div></div><p class="text-xs text-center text-stone-500 max-w-sm">QR code contains the member ID only. Verification uses the records stored in this browser.</p></div>`;openModal('Digital Membership Pass',body,`<button class="btn btn-light" onclick="closeModal()">Close</button><button class="btn btn-light" onclick="showDossier('${m.id}')"><i class="fa-solid fa-file-lines"></i> Proof Dossier</button><button class="btn btn-gold" onclick="downloadPass('${m.id}')"><i class="fa-solid fa-download"></i> Download Pass PNG</button>`);setTimeout(()=>{const q=$('passQr');if(q&&window.QRCode){q.innerHTML='';new QRCode(q,{text:m.id,width:108,height:108,colorDark:'#1c1c1e',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M})}else if(q)q.innerHTML=`<span class="text-[10px] text-center">QR library unavailable<br>${esc(m.id)}</span>`},40)}
 function drawQRToCanvas(text,canvas,size=120){if(!window.QRCode)return Promise.reject(new Error('QR library unavailable'));return new Promise((resolve,reject)=>{const temp=document.createElement('div');temp.style.position='fixed';temp.style.left='-9999px';document.body.appendChild(temp);try{new QRCode(temp,{text,width:size,height:size,correctLevel:QRCode.CorrectLevel.M});setTimeout(()=>{const source=temp.querySelector('canvas')||temp.querySelector('img');if(!source){temp.remove();reject(new Error('QR generation failed'));return}const ctx=canvas.getContext('2d');if(source.tagName==='CANVAS')ctx.drawImage(source,0,0,size,size);else{const img=new Image();img.onload=()=>{ctx.drawImage(img,0,0,size,size);temp.remove();resolve()};img.onerror=()=>{temp.remove();reject(new Error('QR image failed'))};img.src=source.src;return}temp.remove();resolve()},80)}catch(e){temp.remove();reject(e)}})}
 async function downloadPass(id){const m=members.find(x=>x.id===id);if(!m)return;try{const c=document.createElement('canvas');c.width=900;c.height=560;const ctx=c.getContext('2d');ctx.fillStyle='#fbf8ef';ctx.fillRect(0,0,c.width,c.height);ctx.strokeStyle='#d4af5a';ctx.lineWidth=3;ctx.strokeRect(18,18,864,524);ctx.fillStyle='#8b6a27';ctx.font='bold 30px Arial';ctx.fillText('IRON-PASS',52,76);ctx.fillStyle='#777';ctx.font='18px Arial';ctx.fillText('ELITE CLUB MEMBERSHIP',52,108);ctx.fillStyle='#b8933f';ctx.fillRect(52,135,796,2);const photo=await loadImage(m.photo||avatarData(m.fullName));ctx.save();ctx.beginPath();ctx.roundRect(52,170,210,230,20);ctx.clip();ctx.drawImage(photo,52,170,210,230);ctx.restore();ctx.fillStyle='#1c1c1e';ctx.font='bold 34px Arial';wrapCanvasText(ctx,m.fullName,300,220,440,42);ctx.font='22px Arial';ctx.fillStyle='#777';ctx.fillText(m.id,300,282);ctx.fillStyle='#8b6a27';ctx.font='bold 20px Arial';ctx.fillText(m.category==='ITF'?(m.beltRank||'ITF TAEKWON-DO'):'GENERAL GYM',300,326);ctx.fillStyle='#777';ctx.font='17px Arial';ctx.fillText('VALID THROUGH',300,374);ctx.fillStyle='#1c1c1e';ctx.font='bold 23px Arial';ctx.fillText(fmtDate(m.membershipExpiryDate),300,406);ctx.fillStyle='#777';ctx.font='16px Arial';ctx.fillText(statusOf(m)==='EXPIRED'?'EXPIRED':statusOf(m)==='EXPIRING'?'RENEWAL SOON':'ACTIVE MEMBER',300,445);const qr=document.createElement('canvas');qr.width=170;qr.height=170;await drawQRToCanvas(m.id,qr,170);ctx.fillStyle='#fff';ctx.fillRect(670,345,190,190);ctx.drawImage(qr,680,355,170,170);const a=document.createElement('a');a.download=`iron-pass-${m.id}.png`;a.href=c.toDataURL('image/png');a.click();toast('Membership pass downloaded as PNG.','success')}catch(e){toast('Could not create PNG. Ensure the QR library loaded and retry.','error')}}
@@ -3311,14 +3325,202 @@ function showDossier(id){const m=members.find(x=>x.id===id);if(!m)return;const b
 function printDossier(id){const m=members.find(x=>x.id===id);if(!m)return;const p=$('printArea');p.classList.remove('hidden');p.innerHTML=$('dossier')?.outerHTML||'';window.print();p.classList.add('hidden')}
 async function downloadDossierImage(id){return downloadPass(id)}
 function playTone(ok){try{const C=window.AudioContext||window.webkitAudioContext;if(!C)return;const c=new C(),o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.type='sine';o.frequency.setValueAtTime(ok?740:220,c.currentTime);if(ok)o.frequency.setValueAtTime(980,c.currentTime+.12);g.gain.setValueAtTime(.0001,c.currentTime);g.gain.exponentialRampToValueAtTime(.18,c.currentTime+.025);g.gain.exponentialRampToValueAtTime(.0001,c.currentTime+(ok?.3:.42));o.start();o.stop(c.currentTime+(ok?.32:.45));o.onended=()=>c.close()}catch(e){}}
-function verifyMember(id){id=String(id||'').trim();const cleanId=getLocalMemberId(id);const m=members.find(x=>x.id.toLowerCase()===id.toLowerCase()||x.id.toLowerCase()===cleanId.toLowerCase()||(x.dbId&&x.dbId.toLowerCase()===id.toLowerCase()));if(!m){toast('Member ID not found. Check the ID or try a name search.','error');return}lastVerifiedId=m.id;const status=statusOf(m),expired=status==='EXPIRED',expiring=status==='EXPIRING',days=dateDiff(m.membershipExpiryDate);if(expired){logAction('CHECK_IN_DENIED_EXPIRED',m,`Unpaid Entry Attempt — expired on ${m.membershipExpiryDate}, ${Math.abs(days)} days overdue`);playTone(false)}else{m.lastCheckIn=new Date().toISOString();const early=new Date().getHours()<Number(settings.openingHour);logAction('CHECK_IN_GRANTED',m,`${expiring?'Renewal reminder — ':''}Check-in granted${early?' — Unsupervised Entry (before opening hour)':''}${expiring?`; membership expires in ${days} day(s)`:''}`);persist();dbUpdateMemberCheckin(m.id,m.lastCheckIn);playTone(true)}const banner=expired?'ACCESS DENIED':'ACCESS GRANTED';$('verifyContent').innerHTML=`<div class="p-5 md:p-7"><div class="flex justify-between items-start gap-3 mb-5"><div><div class="eyebrow">Entry verification</div><div class="text-xs text-stone-500 mt-1">Local record match · ${new Date().toLocaleTimeString()}</div></div><button class="btn btn-light btn-sm" onclick="closeVerification()" aria-label="Close"><i class="fa-solid fa-xmark"></i></button></div><div class="verify-status ${status.toLowerCase()}"><i class="fa-solid ${expired?'fa-ban':'fa-circle-check'} text-3xl"></i><div class="text-2xl md:text-3xl font-black tracking-tight mt-2">${banner}</div><div class="text-sm font-semibold mt-1">${expired?'Membership expired':expiring?`Membership expires in ${days} day${days===1?'':'s'}`:'Membership valid'}</div></div><div class="flex flex-col sm:flex-row items-center gap-5 py-6"><img src="${m.photo||avatarData(m.fullName)}" class="w-28 h-28 rounded-2xl object-cover border-2 ${expired?'border-red-200':expiring?'border-amber-200':'border-emerald-200'}" alt="${esc(m.fullName)} profile photo"><div class="text-center sm:text-left flex-1"><h2 id="verifyName" class="text-2xl font-extrabold">${esc(m.fullName)}</h2><div class="text-sm text-stone-500 mt-1">${esc(m.id)} · ${m.category==='ITF'?'ITF Taekwon-Do':'General Gym'}</div>${m.category==='ITF'?`<div class="text-sm font-bold text-[#8b6a27] mt-2">${esc(m.beltRank||'Rank not set')}</div>`:''}<div class="mt-3">${statusBadge(m)}</div></div></div><div class="grid grid-cols-2 gap-4 rounded-xl bg-[#faf9f6] p-4">${detail(expired?'Overdue by':'Time remaining',days<0?`${Math.abs(days)} days overdue`:days===0?'Expires today':`${days} days`)}${detail('Expiry date',fmtDate(m.membershipExpiryDate))}${detail('Monthly fee',fmtMoney(m.monthlyFee))}${detail('Phone',m.phone)}</div>${expired?`<div class="mt-4 p-3 rounded-xl bg-red-50 border border-red-100 text-sm text-red-800"><i class="fa-solid fa-triangle-exclamation mr-2"></i>Do not grant entry until the membership is renewed.</div>`:expiring?`<div class="mt-4 p-3 rounded-xl bg-amber-50 border border-amber-100 text-sm text-amber-900"><i class="fa-solid fa-bell mr-2"></i>Remind this member to renew soon.</div>`:`<div class="mt-4 p-3 rounded-xl bg-emerald-50 border border-emerald-100 text-sm text-emerald-800"><i class="fa-solid fa-check mr-2"></i>Membership is valid. Check-in has been logged.</div>`}</div><div class="modal-foot">
-  <button class="btn btn-light" onclick="closeVerification()">Close / Next Scan</button>
-  <button class="btn btn-light" onclick="viewMember('${m.id}')"><i class="fa-regular fa-eye"></i> Full Profile</button>
-  ${isOwner() 
-    ? `<button class="btn btn-gold" onclick="closeVerification();openRenewModal('${m.id}')"><i class="fa-solid fa-arrows-rotate"></i> Renew Membership</button>`
-    : (expired ? `<div class="inline-flex items-center text-xs font-bold text-red-600 bg-red-50 border border-red-200 px-3 py-1.5 rounded-lg"><i class="fa-solid fa-lock mr-1.5"></i> Entry Blocked — Renewal is Owner Only</div>` : '')
+function extractMemberIdentifier(raw) {
+  if (!raw) return '';
+  let str = String(raw).trim();
+  // Handle JSON encoded QR codes (e.g. {"id":"IP-0001", "name":"..."})
+  if ((str.startsWith('{') && str.endsWith('}')) || (str.startsWith('[') && str.endsWith(']'))) {
+    try {
+      const obj = JSON.parse(str);
+      if (obj && typeof obj === 'object') {
+        return String(obj.id || obj.memberId || obj.member_id || obj.phone || obj.code || obj.name || '').trim();
+      }
+    } catch(e) {}
   }
-</div>`;pushModalHistoryState();$('verifyOverlay').classList.add('open');document.body.style.overflow='hidden';refreshCurrent()}
+  // Handle URLs (e.g. https://.../?id=IP-0001 or com.wolisogym.app://verify?id=IP-0001)
+  if (str.includes('://') || str.startsWith('http')) {
+    try {
+      const u = new URL(str);
+      const param = u.searchParams.get('id') || u.searchParams.get('member') || u.searchParams.get('memberId') || u.searchParams.get('code') || u.searchParams.get('phone');
+      if (param) return param.trim();
+    } catch(e) {}
+  }
+  // Strip common prefixes like ID:, Member:, Pass:, Code:
+  str = str.replace(/^(id|member|pass|code|user)\s*:\s*/i, '').trim();
+  return str;
+}
+
+function findMemberByIdentifier(raw) {
+  const query = extractMemberIdentifier(raw);
+  if (!query) return null;
+  const qLower = query.toLowerCase();
+  const cleanQ = getLocalMemberId(query).toLowerCase();
+
+  // 1. Strict match on exact Member ID or Database ID
+  let match = members.find(m => 
+    m.id.toLowerCase() === qLower || 
+    m.id.toLowerCase() === cleanQ || 
+    (m.dbId && m.dbId.toLowerCase() === qLower) ||
+    (m.dbId && m.dbId.toLowerCase() === cleanQ)
+  );
+  if (match) return match;
+
+  // 2. Strict match on Phone Number (digits only, at least 8 digits)
+  const digits = query.replace(/\D/g, '');
+  if (digits.length >= 8) {
+    const phoneMatches = members.filter(m => {
+      const mDigits = (m.phone || '').replace(/\D/g, '');
+      return mDigits && (mDigits === digits || mDigits.endsWith(digits) || digits.endsWith(mDigits));
+    });
+    // 1 QR for 1 person only: match ONLY if exactly one member has this phone number
+    if (phoneMatches.length === 1) return phoneMatches[0];
+  }
+
+  // 3. Strict match on Full Name (case-insensitive)
+  const nameMatches = members.filter(m => (m.fullName || '').trim().toLowerCase() === qLower);
+  if (nameMatches.length === 1) return nameMatches[0];
+
+  return null;
+}
+
+function renderVerificationCard(m) {
+  if (!m) return;
+  lastVerifiedId = m.id;
+  const status = statusOf(m);
+  const expired = status === 'EXPIRED';
+  const expiring = status === 'EXPIRING';
+  const days = dateDiff(m.membershipExpiryDate);
+
+  if (expired) {
+    logAction('CHECK_IN_DENIED_EXPIRED', m, `Unpaid Entry Attempt — expired on ${m.membershipExpiryDate}, ${Math.abs(days)} days overdue`);
+    playTone(false);
+  } else {
+    m.lastCheckIn = new Date().toISOString();
+    const early = new Date().getHours() < Number(settings.openingHour);
+    logAction('CHECK_IN_GRANTED', m, `${expiring ? 'Renewal reminder — ' : ''}Check-in granted${early ? ' — Unsupervised Entry (before opening hour)' : ''}${expiring ? `; membership expires in ${days} day(s)` : ''}`);
+    persist();
+    dbUpdateMemberCheckin(m.id, m.lastCheckIn);
+    playTone(true);
+  }
+
+  const banner = expired ? 'ACCESS DENIED' : 'ACCESS GRANTED';
+  $('verifyContent').innerHTML = `<div class="p-5 md:p-7">
+    <div class="flex justify-between items-start gap-3 mb-5">
+      <div>
+        <div class="eyebrow">Entry verification</div>
+        <div class="text-xs text-stone-500 mt-1">Woliso Gym &amp; ITF · ${new Date().toLocaleTimeString()}</div>
+      </div>
+      <button class="btn btn-light btn-sm" onclick="closeVerification()" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="verify-status ${status.toLowerCase()}">
+      <i class="fa-solid ${expired ? 'fa-ban' : 'fa-circle-check'} text-3xl"></i>
+      <div class="text-2xl md:text-3xl font-black tracking-tight mt-2">${banner}</div>
+      <div class="text-sm font-semibold mt-1">${expired ? 'Membership expired' : expiring ? `Membership expires in ${days} day${days === 1 ? '' : 's'}` : `Membership valid · ${days} days remaining`}</div>
+    </div>
+    <div class="flex flex-col sm:flex-row items-center gap-5 py-6">
+      <img src="${m.photo || avatarData(m.fullName)}" class="w-28 h-28 rounded-2xl object-cover border-2 ${expired ? 'border-red-200' : expiring ? 'border-amber-200' : 'border-emerald-200'}" alt="${esc(m.fullName)} profile photo">
+      <div class="text-center sm:text-left flex-1">
+        <h2 id="verifyName" class="text-2xl font-extrabold">${esc(m.fullName)}</h2>
+        <div class="text-sm text-stone-500 mt-1">${esc(m.id)} · ${m.category === 'ITF' ? 'ITF Taekwon-Do' : 'General Gym'}</div>
+        ${m.category === 'ITF' ? `<div class="text-sm font-bold text-[#8b6a27] mt-2">${esc(m.beltRank || 'Rank not set')}</div>` : ''}
+        <div class="mt-3">${statusBadge(m)}</div>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 gap-4 rounded-xl bg-[#faf9f6] p-4">
+      ${detail(expired ? 'Overdue by' : 'Time remaining', days < 0 ? `${Math.abs(days)} days overdue` : days === 0 ? 'Expires today' : `${days} days remaining`)}
+      ${detail('Valid through', fmtDate(m.membershipExpiryDate))}
+      ${detail('Monthly fee', fmtMoney(m.monthlyFee))}
+      ${detail('Phone', m.phone)}
+    </div>
+    ${expired ? `<div class="mt-4 p-3 rounded-xl bg-red-50 border border-red-100 text-sm text-red-800"><i class="fa-solid fa-triangle-exclamation mr-2"></i>Do not grant entry until the membership is renewed by the owner.</div>` : expiring ? `<div class="mt-4 p-3 rounded-xl bg-amber-50 border border-amber-100 text-sm text-amber-900"><i class="fa-solid fa-bell mr-2"></i>Remind this member to renew soon.</div>` : `<div class="mt-4 p-3 rounded-xl bg-emerald-50 border border-emerald-100 text-sm text-emerald-800"><i class="fa-solid fa-check mr-2"></i>Membership is valid and active. Check-in has been logged.</div>`}
+  </div>
+  <div class="modal-foot">
+    <button class="btn btn-light" onclick="closeVerification()">Close / Next Scan</button>
+    <button class="btn btn-light" onclick="viewMember('${m.id}')"><i class="fa-regular fa-eye"></i> Full Profile</button>
+    ${isOwner() 
+      ? `<button class="btn btn-gold" onclick="closeVerification();openRenewModal('${m.id}')"><i class="fa-solid fa-arrows-rotate"></i> Renew Membership</button>`
+      : (expired ? `<div class="inline-flex items-center text-xs font-bold text-red-600 bg-red-50 border border-red-200 px-3 py-1.5 rounded-lg"><i class="fa-solid fa-lock mr-1.5"></i> Entry Blocked — Renewal is Owner Only</div>` : '')
+    }
+  </div>`;
+  pushModalHistoryState();
+  $('verifyOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  refreshCurrent();
+}
+
+async function verifyMember(id){
+  const rawQuery = String(id || '').trim();
+  const identifier = extractMemberIdentifier(rawQuery);
+  if (!identifier) {
+    toast('No member ID or code found in scanned QR.', 'error');
+    return;
+  }
+
+  // 1. First, search local memory
+  let m = findMemberByIdentifier(rawQuery);
+
+  // 2. If not found locally, check Supabase cloud in real time (e.g. member added recently on another phone)
+  if (!m && supabaseClient && navigator.onLine) {
+    try {
+      const cleanId = getLocalMemberId(identifier);
+      const { data, error } = await supabaseClient
+        .from('members')
+        .select('*')
+        .or(`id.eq.${cleanId},phone.eq.${identifier},full_name.ilike.${identifier}`)
+        .limit(1);
+
+      if (data && data.length > 0) {
+        m = memberFromRow(data[0]);
+        const exists = members.some(x => x.id === m.id);
+        if (!exists) {
+          members.unshift(m);
+          persist();
+        }
+      }
+    } catch(err) {
+      console.warn('Real-time cloud lookup note:', err);
+    }
+  }
+
+  // If still not found anywhere:
+  if (!m) {
+    playTone(false);
+    toast(`QR not recognized: "${identifier}". Member not found in records.`, 'error');
+    return;
+  }
+
+  // 3. Member is found! Immediately show verification card
+  renderVerificationCard(m);
+
+  // 4. Background cloud freshness check: if the owner just adjusted or renewed the member on the cloud, fetch and display the updated expiry date!
+  if (supabaseClient && navigator.onLine) {
+    const checkId = getLocalMemberId(m.id || m.dbId);
+    supabaseClient
+      .from('members')
+      .select('*')
+      .eq('id', checkId)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (data && !error) {
+          const fresh = memberFromRow(data);
+          if (fresh.membershipExpiryDate !== m.membershipExpiryDate || fresh.fullName !== m.fullName) {
+            console.log('Member renewed/adjusted on cloud:', fresh);
+            const idx = members.findIndex(x => x.id === m.id || x.dbId === m.dbId);
+            if (idx >= 0) {
+              members[idx] = { ...members[idx], ...fresh };
+              persist();
+              if (lastVerifiedId === m.id) {
+                renderVerificationCard(members[idx]);
+                toast('Updated with latest cloud renewal: Valid through ' + fmtDate(fresh.membershipExpiryDate), 'success');
+              }
+            }
+          }
+        }
+      })
+      .catch(err => console.warn('Background renewal verification note:', err));
+  }
+}
+
 function closeVerification(){$('verifyOverlay').classList.remove('open');document.body.style.overflow='';$('manualMember').value='';$('manualMember').focus()}
 function manualLookup(){const q=$('manualMember').value.trim().toLowerCase();if(!q)return toast('Enter a member ID, name or phone.','error');const exact=members.find(m=>m.id.toLowerCase()===q);if(exact)return verifyMember(exact.id);const matches=members.filter(m=>m.fullName.toLowerCase().includes(q)||m.phone.toLowerCase().includes(q));if(matches.length===1)return verifyMember(matches[0].id);if(matches.length>1){openModal('Choose a member',`<p class="text-sm text-stone-500 mb-3">More than one member matches. Select the correct person.</p><div class="space-y-2">${matches.slice(0,15).map(m=>`<button class="w-full text-left flex items-center gap-3 p-3 border border-[#eeeae1] rounded-xl hover:bg-[#faf8f2]" onclick="closeModal();verifyMember('${m.id}')"><img src="${m.photo||avatarData(m.fullName)}" class="w-10 h-10 rounded-lg object-cover" alt=""><div><div class="font-bold text-sm">${esc(m.fullName)}</div><div class="text-xs text-stone-500">${esc(m.id)} · ${esc(m.phone)}</div></div><span class="ml-auto">${statusBadge(m)}</span></button>`).join('')}</div>`,`<button class="btn btn-light" onclick="closeModal()">Cancel</button>`);return}toast('No matching member found.','error')}
 async function startScanner(){if(scannerRunning)return;if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){toast('Camera access is unavailable. Open IRON-PASS using HTTPS or http://localhost.', 'error');return}if(!window.Html5Qrcode){toast('Camera scanner code is unavailable. Use manual lookup.', 'error');return}try{scanner=new Html5Qrcode('qr-reader');$('startScanBtn').disabled=true;$('stopScanBtn').disabled=false;await scanner.start({facingMode:'environment'},{fps:10,qrbox:{width:230,height:230}},decoded=>{if(decoded){stopScanner();verifyMember(decoded.trim())}},()=>{});scannerRunning=true;toast('Camera scanner started.','success')}catch(e){scannerRunning=false;$('startScanBtn').disabled=false;$('stopScanBtn').disabled=true;let msg=(e&&e.message)||String(e||'Unknown camera error');if(e&&e.name==='NotAllowedError')msg='Camera permission was denied. Allow camera access for this site in Chrome Site Settings.';else if(e&&e.name==='NotFoundError')msg='No camera was found. Connect or enable a camera and try again.';else if(e&&e.name==='NotReadableError')msg='The camera is busy or unavailable. Close apps using the camera and try again.';else if(e&&e.name==='OverconstrainedError')msg='The requested camera mode is unavailable. Try another camera.';toast('Camera error: '+msg,'error');console.error('IRON-PASS camera start failed:',e)}}
