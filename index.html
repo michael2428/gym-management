@@ -2127,25 +2127,47 @@ END $$;
 `;
 
 // --- MULTI-ACCOUNT TENANT DATA ISOLATION HELPERS ---
-let hasSupabaseUserIdColumn = false;
+let hasSupabaseUserIdColumn = true;
+
+function getActiveTenantId() {
+  const linked = (localStorage.getItem('ironpass_linked_gym_id') || '').trim();
+  if (linked) return linked;
+  return currentAuthUser?.id || '';
+}
+
+function getActiveShortTenantId() {
+  const linked = (localStorage.getItem('ironpass_linked_gym_id') || '').trim();
+  if (linked) return linked.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8);
+  const uid = currentAuthUser?.id || '';
+  return uid ? uid.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) : 'anon';
+}
 
 function getAuthUserId() {
   return currentAuthUser?.id || '';
 }
 
 function getAuthShortUid() {
-  const uid = getAuthUserId();
-  return uid ? uid.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) : 'anon';
+  return getActiveShortTenantId();
 }
 
 function getScopedMemberDbId(localId) {
-  return getLocalMemberId(localId);
+  if (!localId) return '';
+  const shortUid = getActiveShortTenantId();
+  if (shortUid === 'anon') return localId;
+  if (localId.includes('_' + shortUid)) return localId;
+  return `${localId}_${shortUid}`;
 }
 
 function getLocalMemberId(dbId) {
   if (!dbId) return '';
+  const shortUid = getActiveShortTenantId();
+  if (shortUid !== 'anon' && dbId.endsWith('_' + shortUid)) {
+    return dbId.slice(0, -(shortUid.length + 1));
+  }
   const idx = dbId.lastIndexOf('_');
-  if (idx > 0) return dbId.slice(0, idx);
+  if (idx > 0 && dbId.length - idx - 1 === 8) {
+    return dbId.slice(0, idx);
+  }
   return dbId;
 }
 
@@ -2155,25 +2177,55 @@ function cleanNotes(notes) {
 
 function embedOwnerTag(notes) {
   const clean = cleanNotes(notes);
-  const uid = getAuthUserId();
+  const uid = getActiveTenantId();
   if (!uid) return clean;
   return clean ? `${clean} [acc:${uid}]` : `[acc:${uid}]`;
 }
 
 function isRowOwnedByCurrentUser(r) {
-  // All gym records belong to Woliso Gym & ITF. Any authenticated staff member has access.
-  return true;
+  if (!r) return false;
+  const myUid = getAuthUserId();
+  const tenantId = getActiveTenantId();
+  const shortUid = getActiveShortTenantId();
+
+  // If completely unauthenticated offline mode, accept local
+  if (!myUid && shortUid === 'anon') return true;
+
+  // 1. Match user_id column
+  if (r.user_id) {
+    if (r.user_id === myUid || r.user_id === tenantId) return true;
+  }
+
+  // 2. Match scoped ID suffix (_shortUid)
+  if (r.id && typeof r.id === 'string' && shortUid !== 'anon') {
+    if (r.id.endsWith('_' + shortUid)) return true;
+  }
+
+  // 3. Match scoped rollcall date suffix
+  if (r.date && typeof r.date === 'string' && shortUid !== 'anon') {
+    if (r.date.endsWith('_' + shortUid)) return true;
+  }
+
+  // 4. Match embedded account tag in notes
+  if (r.notes && typeof r.notes === 'string') {
+    if ((myUid && r.notes.includes(`[acc:${myUid}]`)) || (tenantId && r.notes.includes(`[acc:${tenantId}]`))) return true;
+  }
+
+  return false;
 }
 
 function getUserStorageKey(baseKey) {
-  // Unified single-gym data store for Woliso Gym & ITF - both Owner & Manager phones share this
-  return baseKey;
+  const shortUid = getActiveShortTenantId();
+  if (!shortUid || shortUid === 'anon') return baseKey;
+  return `${baseKey}_${shortUid}`;
 }
 
 function memberToRow(m){
   const cleanId = getLocalMemberId(m.id || m.dbId);
+  const dbId = getScopedMemberDbId(cleanId);
+  const uid = getActiveTenantId();
   const row = {
-    id: cleanId,
+    id: dbId,
     full_name: m.fullName || '',
     photo: m.photo || null,
     category: m.category || 'GYM',
@@ -2186,11 +2238,9 @@ function memberToRow(m){
     monthly_fee: Number(m.monthlyFee || 0),
     notes: embedOwnerTag(m.notes || ''),
     created_at: m.createdAt || new Date().toISOString(),
-    last_check_in: m.lastCheckIn || null
+    last_check_in: m.lastCheckIn || null,
+    user_id: uid || null
   };
-  if (hasSupabaseUserIdColumn && currentAuthUser?.id) {
-    row.user_id = currentAuthUser.id;
-  }
   return row;
 }
 
@@ -2216,17 +2266,17 @@ function memberFromRow(r){
 
 function auditToRow(a){
   const cleanId = a.id || uid();
+  const shortUid = getActiveShortTenantId();
+  const scopedId = (shortUid !== 'anon' && !cleanId.includes('_' + shortUid)) ? `${cleanId}_${shortUid}` : cleanId;
   const row = {
-    id: cleanId,
+    id: scopedId,
     member_id: a.memberId ? getLocalMemberId(a.memberId) : (a.memberId || null),
     member_name: a.memberName || 'System',
     action: a.action || 'UPDATE',
     timestamp: a.timestamp || new Date().toISOString(),
-    details: cleanNotes(a.details || '')
+    details: cleanNotes(a.details || ''),
+    user_id: getActiveTenantId() || null
   };
-  if (hasSupabaseUserIdColumn && currentAuthUser?.id) {
-    row.user_id = currentAuthUser.id;
-  }
   return row;
 }
 
@@ -2460,16 +2510,16 @@ async function dbUpsertMember(m){
 
 async function dbDeleteMember(id){
   const cleanId = getLocalMemberId(id);
+  const dbId = getScopedMemberDbId(cleanId);
   if (!cleanId) return;
   if (!supabaseClient || !navigator.onLine) {
     enqueueSyncOp('DELETE_MEMBER', { id: cleanId });
     return;
   }
   try {
-    // Delete by cleanId or any legacy prefixed/suffixed id
-    let res = await supabaseClient.from('members').delete().or(`id.eq.${cleanId},id.like.${cleanId}_%`);
-    if (res.error) {
-      console.warn('Supabase member delete note:', res.error);
+    const { error } = await supabaseClient.from('members').delete().or(`id.eq.${cleanId},id.eq.${dbId}`);
+    if (error) {
+      console.warn('Supabase member delete error, queueing offline:', error);
       enqueueSyncOp('DELETE_MEMBER', { id: cleanId });
     }
   } catch(e) {
@@ -2485,7 +2535,8 @@ async function dbUpdateMemberCheckin(id,timestamp){
   }
   try{
     const cleanId = getLocalMemberId(id);
-    const { error } = await supabaseClient.from('members').update({last_check_in:timestamp}).eq('id', cleanId);
+    const dbId = getScopedMemberDbId(cleanId);
+    const { error } = await supabaseClient.from('members').update({last_check_in:timestamp}).or(`id.eq.${cleanId},id.eq.${dbId}`);
     if(error){
       console.warn('Supabase checkin update error, queueing offline:', error);
       enqueueSyncOp('CHECKIN_MEMBER', { id, timestamp });
@@ -2503,7 +2554,8 @@ async function dbUpdateMemberRenewal(id,expiryDate){
   }
   try{
     const cleanId = getLocalMemberId(id);
-    const { error } = await supabaseClient.from('members').update({membership_expiry_date:expiryDate}).eq('id', cleanId);
+    const dbId = getScopedMemberDbId(cleanId);
+    const { error } = await supabaseClient.from('members').update({membership_expiry_date:expiryDate}).or(`id.eq.${cleanId},id.eq.${dbId}`);
     if(error){
       console.warn('Supabase renewal update error, queueing offline:', error);
       enqueueSyncOp('RENEW_MEMBER', { id, expiryDate });
@@ -2778,16 +2830,21 @@ async function syncFromSupabase(silent=false){
     // 0. Drain offline queue first
     await processOfflineSyncQueue();
 
-    // 1. Members: Query all gym members
+    const myUid = getAuthUserId();
+    const tenantId = getActiveTenantId();
+    const shortUid = getActiveShortTenantId();
+
+    // 1. Members: Query members belonging strictly to this user / gym workspace
     let memberRows = [];
-    const { data: mRows, error: memberErr } = await supabaseClient.from('members').select('*').order('created_at', { ascending: false });
+    let mQuery = supabaseClient.from('members').select('*');
+    if (tenantId && shortUid !== 'anon') {
+      mQuery = mQuery.or(`user_id.eq.${tenantId},id.like.%_${shortUid}`);
+    }
+    const { data: mRows, error: memberErr } = await mQuery.order('created_at', { ascending: false });
     if (!memberErr && Array.isArray(mRows)) {
-      memberRows = mRows;
+      memberRows = mRows.filter(isRowOwnedByCurrentUser);
     } else if (memberErr) {
       console.warn('Members query error:', memberErr);
-      if (memberErr.code === '42501') {
-        console.warn('RLS permission note: Ensure Supabase policies are active.');
-      }
     }
 
     // Merge members without losing offline edits
@@ -2799,12 +2856,11 @@ async function syncFromSupabase(silent=false){
       if (!lm) {
         localMap.set(cm.id, cm);
       } else {
-        // Cloud is single source of truth for membership status & expiry, unless an unpushed local renewal exists
         const hasPendingLocalRenewal = syncQueue.some(op => op.type === 'RENEW_MEMBER' && getLocalMemberId(op.payload.id) === cm.id);
         const resolvedExpiry = hasPendingLocalRenewal ? lm.membershipExpiryDate : (cm.membershipExpiryDate || lm.membershipExpiryDate);
         const merged = {
           ...lm,
-          ...cm, // Cloud fields overwrite stale local fields
+          ...cm,
           photo: cm.photo || lm.photo,
           membershipExpiryDate: resolvedExpiry,
           lastCheckIn: (lm.lastCheckIn && (!cm.lastCheckIn || lm.lastCheckIn > cm.lastCheckIn)) ? lm.lastCheckIn : (cm.lastCheckIn || lm.lastCheckIn)
@@ -2816,10 +2872,14 @@ async function syncFromSupabase(silent=false){
     members = Array.from(localMap.values());
     persist();
 
-    // 2. Audit Log: Merge without duplicates
-    const { data: auditRows } = await supabaseClient.from('audit_log').select('*').order('timestamp', { ascending: false }).limit(500);
+    // 2. Audit Log: Query logs belonging strictly to this user
+    let aQuery = supabaseClient.from('audit_log').select('*');
+    if (tenantId && shortUid !== 'anon') {
+      aQuery = aQuery.or(`user_id.eq.${tenantId},id.like.%_${shortUid}`);
+    }
+    const { data: auditRows } = await aQuery.order('timestamp', { ascending: false }).limit(500);
     if (Array.isArray(auditRows) && auditRows.length > 0) {
-      const cloudAudits = auditRows.map(auditFromRow);
+      const cloudAudits = auditRows.filter(isRowOwnedByCurrentUser).map(auditFromRow);
       const existingAuditIds = new Set(auditLog.map(a => a.id));
       cloudAudits.forEach(ca => {
         if (!existingAuditIds.has(ca.id)) {
@@ -2836,7 +2896,8 @@ async function syncFromSupabase(silent=false){
     const { data: rollRows } = await supabaseClient.from('rollcall').select('*');
     if (Array.isArray(rollRows) && rollRows.length > 0) {
       const todayTarget = todayISO();
-      const todayRoll = rollRows.find(r => r.date === todayTarget || r.date.startsWith(todayTarget));
+      const validRolls = rollRows.filter(isRowOwnedByCurrentUser);
+      const todayRoll = validRolls.find(r => r.date === todayTarget || r.date.startsWith(todayTarget));
       if (todayRoll && Array.isArray(todayRoll.present_ids)) {
         const combined = new Set([...rollcallPresent, ...todayRoll.present_ids]);
         rollcallPresent = combined;
@@ -2844,28 +2905,32 @@ async function syncFromSupabase(silent=false){
       }
     }
 
-    // 4. Settings: Merge cloud settings
-    const { data: setRows } = await supabaseClient.from('settings').select('*');
+    // 4. Settings: Merge cloud settings for this tenant
+    let setQuery = supabaseClient.from('settings').select('*');
+    if (tenantId && shortUid !== 'anon') {
+      setQuery = setQuery.or(`user_id.eq.${tenantId},id.eq.settings_${shortUid}`);
+    }
+    const { data: setRows } = await setQuery;
     if (Array.isArray(setRows) && setRows.length > 0) {
-      const mySettings = setRows.find(r => r.id === 'default') || setRows[0];
-      if (mySettings) {
+      const mySettings = setRows.find(isRowOwnedByCurrentUser) || setRows[0];
+      if (mySettings && isRowOwnedByCurrentUser(mySettings)) {
         if (mySettings.club_name) settings.clubName = mySettings.club_name;
-        if (mySettings.opening_hour !== undefined && mySettings.opening_hour !== null) settings.openingHour = Number(mySettings.opening_hour);
+        if (mySettings.opening_hour !== undefined) settings.openingHour = Number(mySettings.opening_hour);
         if (mySettings.currency) settings.currency = mySettings.currency;
         persist();
       }
     }
 
     updateSupabaseStatusUI('connected');
-    updateNetworkSyncBadge();
+    updateNetworkSyncBadge('synced');
     refreshCurrent();
-    if (!silent) toast('Gym records synchronized with Supabase cloud!', 'success');
+    if(!silent) toast('Gym records synced successfully with cloud.','success');
     return true;
-  } catch (err) {
-    console.error('Supabase sync error:', err);
-    updateSupabaseStatusUI('error', err.message);
-    updateNetworkSyncBadge();
-    if (!silent) toast(`Supabase sync: ${err.message || 'Network error'}`, 'error');
+  }catch(e){
+    console.error('Supabase sync error:',e);
+    updateSupabaseStatusUI('error',e.message);
+    updateNetworkSyncBadge('offline');
+    if(!silent) toast('Sync error: '+e.message,'error');
     return false;
   }
 }
@@ -3119,34 +3184,37 @@ async function purgeLegacyDemoMembers() {
 }
 
 function loadData(){
-  // Clean up any legacy tenant keys once and for all so deleted data never resurrects
+  const rollcallKey = getUserStorageKey('ip_rollcall_' + todayISO());
+  rollcallPresent = new Set(readJSON(rollcallKey, []));
+
   try {
-    for (let i = localStorage.length - 1; i >= 0; i--) {
-      const k = localStorage.key(i);
-      if (k && k.startsWith('ironpass_members_') && k !== 'ironpass_members') {
-        localStorage.removeItem(k);
+    const membersKey = getUserStorageKey(KEYS.members);
+    let loaded = readJSON(membersKey, null);
+
+    // If new tenant key has no records yet, check if legacy base key had data from before
+    if (loaded === null) {
+      const baseMembers = readJSON(KEYS.members, null);
+      if (Array.isArray(baseMembers) && baseMembers.length > 0) {
+        console.log('Migrating local records to active account key:', membersKey);
+        loaded = baseMembers;
+        writeJSON(membersKey, loaded);
+        localStorage.removeItem(KEYS.members);
+        const baseAudit = readJSON(KEYS.audit, null);
+        if (Array.isArray(baseAudit)) {
+          writeJSON(getUserStorageKey(KEYS.audit), baseAudit);
+          localStorage.removeItem(KEYS.audit);
+        }
       }
     }
-  } catch(e) {}
 
-  if (!currentAuthUser) {
-    const cachedAuth = readJSON('ironpass_auth_user', null);
-    if (cachedAuth && cachedAuth.id) {
-      currentAuthUser = cachedAuth;
-      applyUserAuthRole(cachedAuth);
-    }
-  }
-  rollcallPresent=new Set(readJSON(getUserStorageKey('ip_rollcall_'+todayISO()),[]));
-  try{
-    const loaded=readJSON(getUserStorageKey(KEYS.members),null);
-    members=Array.isArray(loaded)?loaded.filter(m=>m&&m.id&&m.fullName):[];
-    auditLog=readJSON(getUserStorageKey(KEYS.audit),[]);
-    if(!Array.isArray(auditLog))auditLog=[];
-    settings={...settings,...readJSON(getUserStorageKey(KEYS.settings),{})};
-    if(!localStorage.getItem(KEYS.version))writeJSON(KEYS.version,SCHEMA_VERSION);
-  }catch(e){
-    members=[];
-    auditLog=[];
+    members = Array.isArray(loaded) ? loaded.filter(m => m && m.id && m.fullName) : [];
+    auditLog = readJSON(getUserStorageKey(KEYS.audit), []);
+    if (!Array.isArray(auditLog)) auditLog = [];
+    settings = { ...settings, ...readJSON(getUserStorageKey(KEYS.settings), {}) };
+    if (!localStorage.getItem(KEYS.version)) writeJSON(KEYS.version, SCHEMA_VERSION);
+  } catch(e) {
+    members = [];
+    auditLog = [];
   }
   updateNetworkSyncBadge();
 }
@@ -4349,6 +4417,43 @@ async function handleSignOut() {
   }
 }
 
+function copyGymId() {
+  const code = getActiveShortTenantId();
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(code).then(() => toast('Gym ID copied: ' + code, 'success'));
+  } else {
+    toast('Gym ID: ' + code, 'info');
+  }
+}
+
+function linkToOwnerGym() {
+  const input = ($('connectGymIdInput')?.value || '').trim();
+  if (!input) {
+    toast('Please enter an Owner Gym ID.', 'error');
+    return;
+  }
+  const cleanCode = input.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8);
+  if (!cleanCode) {
+    toast('Invalid Gym ID format.', 'error');
+    return;
+  }
+  localStorage.setItem('ironpass_linked_gym_id', cleanCode);
+  toast('Connected to Gym ID: ' + cleanCode + '. Reloading data...', 'success');
+  loadData();
+  syncFromSupabase(false);
+  renderAccountSettingsUI();
+  refreshCurrent();
+}
+
+function unlinkGym() {
+  localStorage.removeItem('ironpass_linked_gym_id');
+  toast('Reset to default account gym.', 'info');
+  loadData();
+  syncFromSupabase(false);
+  renderAccountSettingsUI();
+  refreshCurrent();
+}
+
 function renderAccountSettingsUI() {
   const container = $('accountCardContent');
   const badge = $('accountStatusBadge');
@@ -4381,7 +4486,32 @@ function renderAccountSettingsUI() {
         <span>Session ID: <code class="text-[10px] font-mono bg-stone-100 px-1.5 py-0.5 rounded">${esc(currentAuthUser.id.slice(0, 14))}...</code></span>
         <span class="text-emerald-700 font-medium"><i class="fa-solid fa-shield-check mr-1"></i>Cloud Sync Authorized</span>
       </div>
-    `;
+      <div class="mt-3 pt-3 border-t border-[#eeeae1] space-y-2 text-xs">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="font-bold text-stone-700 flex items-center gap-1.5">
+            <i class="fa-solid fa-building-shield text-[#8b6a27]"></i>
+            <span>Gym Sync ID:</span>
+            <code class="font-mono bg-stone-200 text-stone-900 px-2 py-0.5 rounded font-extrabold">${esc(getActiveShortTenantId())}</code>
+          </div>
+          <button type="button" class="btn btn-light btn-sm text-[11px] py-1" onclick="copyGymId()">
+            <i class="fa-regular fa-copy mr-1"></i> Copy Gym ID
+          </button>
+        </div>
+        <p class="text-[11px] text-stone-500">
+          <b>Multi-Phone Sync:</b> Sign into both phones with the <u>same Google account</u> (recommended), OR if using different Google accounts, enter the Owner's Gym ID below to connect both phones to the same gym.
+        </p>
+        <div class="flex items-center gap-2 pt-1">
+          <input id="connectGymIdInput" type="text" class="field text-xs py-1.5 font-mono" placeholder="Enter Owner's Gym ID to link..." value="${esc(localStorage.getItem('ironpass_linked_gym_id') || '')}">
+          <button type="button" class="btn btn-gold btn-sm text-xs py-1.5 whitespace-nowrap" onclick="linkToOwnerGym()">
+            <i class="fa-solid fa-link mr-1"></i> Link Gym
+          </button>
+          ${localStorage.getItem('ironpass_linked_gym_id') ? `
+            <button type="button" class="btn btn-light btn-sm text-xs py-1.5" onclick="unlinkGym()">
+              Unlink
+            </button>
+          ` : ''}
+        </div>
+      </div>`;
   } else if (isUnlockedOffline) {
     if (badge) {
       badge.className = 'card-badge-pill amber';
